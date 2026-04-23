@@ -53,3 +53,19 @@ parser/input/
 
 # Excel-tiedostot (lähdedata)
 *.xlsx
+
+# PDF-tiedostot (tarjousasiakirjat yms.)
+*.pdf
+
+# Muut isot datatiedostot
+data/zip/
+"data/parser 2/"
+"data/parser 2.zip"
+"data/parserin tuotos.zip"
+data/inforce_laws.json
+
+# Vanhat / kokeelliset skriptit
+finlex_parser_documented.py
+finlex_parser_snowflake.py
+finlex_paser_snowflake2.py
+notes.pdf

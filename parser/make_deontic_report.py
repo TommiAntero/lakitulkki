@@ -223,15 +223,65 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 .num {{ text-align: right; }}
 .light {{ color: #b2bec3; }}
 .match-icon {{ font-size: 14px; }}
+
+/* ── Välilehdet ── */
+#tabs {{ display: flex; gap: 0; background: #2d3436; padding: 0 16px; flex-shrink: 0; }}
+.tab {{
+  padding: 10px 18px; cursor: pointer; font-size: 13px; color: #b2bec3;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+  user-select: none;
+}}
+.tab:hover {{ color: #fff; }}
+.tab.active {{ color: #fff; border-bottom-color: #74b9ff; }}
+.tab-content {{ display: none; }}
+.tab-content.active {{ display: flex; flex-direction: column; flex: 1; overflow: hidden; }}
+
+/* ── Info-välilehti ── */
+#info-content {{
+  flex: 1; overflow-y: auto; padding: 32px 40px; max-width: 860px;
+}}
+#info-content h2 {{
+  font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #2d3436;
+}}
+#info-content h3 {{
+  font-size: 14px; font-weight: 700; margin: 24px 0 8px 0;
+  color: #2d3436; text-transform: uppercase; letter-spacing: 0.05em;
+}}
+#info-content p {{ line-height: 1.7; color: #4a4a4a; margin-bottom: 10px; }}
+#info-content ul {{ padding-left: 20px; line-height: 1.8; color: #4a4a4a; margin-bottom: 10px; }}
+#info-content .step {{
+  display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start;
+}}
+#info-content .step-num {{
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+  background: #2d3436; color: #fff; display: flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 13px; margin-top: 2px;
+}}
+#info-content .step-body h4 {{ font-size: 14px; font-weight: 600; margin-bottom: 4px; }}
+#info-content .step-body p {{ margin: 0; }}
+#info-content .pill {{
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-size: 12px; font-weight: 600; color: #fff; margin: 2px 3px 2px 0;
+  vertical-align: middle;
+}}
+.divider {{ border: none; border-top: 1px solid #dfe6e9; margin: 24px 0; }}
 </style>
 </head>
 <body>
 <div id="app">
 
-<div id="top">
+<div id="top" style="display:flex;align-items:center;gap:16px">
   <h1>&#9654; Deonttinen analyysi</h1>
   <span style="color:#b2bec3;font-size:12px">LLM vs. regex-klassifikaattori · {len(rows):,} pykälää</span>
 </div>
+
+<div id="tabs">
+  <div class="tab active" onclick="switchTab('report')">Tulokset</div>
+  <div class="tab" onclick="switchTab('info')">&#9432; Tietoa analyysista</div>
+</div>
+
+<!-- ── TULOKSET-VÄLILEHTI ── -->
+<div id="tab-report" class="tab-content active">
 
 <div id="stats-bar">
   {stats_html}
@@ -284,7 +334,125 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   </table>
 </div>
 
+</div><!-- /tab-report -->
+
+<!-- ── INFO-VÄLILEHTI ── -->
+<div id="tab-info" class="tab-content">
+<div id="info-content">
+
+  <h2>Deonttinen analyysi — menetelmä ja aineisto</h2>
+  <p>Tämä työkalu vertaa kielimallipohjaista (LLM) annotaatiota
+  regex-pohjaisen luokittimen tuloksiin. Alla kuvataan analyysin vaiheet.</p>
+
+  <hr class="divider">
+  <h3>Aineiston hankinta ja käsittely</h3>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h4>Lainsäädännön lataus ja parsinta</h4>
+      <p>Finlexin avoimen datan arkistosta ladattiin kaikki voimassa olevat
+      suomenkieliset säädökset AKN-muotoisina XML-tiedostoina (~4 GB ZIP).
+      Jokaisesta laista poimittiin rakenteiset elementit: luvut, pykälät,
+      momentit ja alakohdat.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h4>Pykälätasoinen aggregointi</h4>
+      <p>Elementtitason rivit koottiin pykälätason tietueiksi: jokaisen
+      pykälän kaikki lapsielementit (momentit, alakohdat) yhdistettiin
+      yhdeksi tekstikentäksi. Näin LLM ja luokitin saavat koko asiayhteyden
+      eikä vain yksittäistä virkettä. Aineistossa on yhteensä
+      <strong>124 414 pykälää</strong>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h4>Otoksen rajaus tiedonhallintakartan mukaan</h4>
+      <p>Analyysiin valittiin lait, jotka esiintyvät
+      <em>Tiedonhallintakartta_tehtävät</em>-aineistossa. Lait ryhmiteltiin
+      organisaatiotyypeittäin:</p>
+      <ul>
+        <li><span class="pill" style="background:#c0392b">Hyvinvointialue</span>
+            35 lakia → <strong>2 163 pykälää</strong> (kaikki mukaan)</li>
+        <li><span class="pill" style="background:#2471a3">Kunta</span>
+            98 lakia → 8 104 pykälää → <strong>2 000 satunnaisotosta</strong></li>
+        <li><span class="pill" style="background:#1e8449">Valtio</span>
+            206 lakia → 10 830 pykälää → <strong>2 000 satunnaisotosta</strong></li>
+      </ul>
+      <p>Otos yhteensä: <strong>6 163 pykälää</strong>.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <h3>LLM-annotointi</h3>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h4>Deonttinen luokittelu kielimallilla</h4>
+      <p>Jokainen pykälä annotoitiin kielimallin avulla deonttiseen
+      modaliteettiin. Malli sai pykälän tekstin ja lain otsikon, ja palautti
+      luokan sekä lyhyen perustelun.</p>
+      <p>Luokat:</p>
+      <ul>
+        <li><span class="pill" style="background:#2471a3">velvoite</span> — subjektilla on velvollisuus toimia</li>
+        <li><span class="pill" style="background:#1e8449">lupa</span> — subjektilla on oikeus tai mahdollisuus toimia</li>
+        <li><span class="pill" style="background:#c0392b">kielto</span> — toiminta on nimenomaisesti kielletty</li>
+        <li><span class="pill" style="background:#d68910">suositus</span> — konditionaali tai pyrkiminen ilman velvoitetta</li>
+        <li><span class="pill" style="background:#7f8c8d">ei_deontti</span> — määritelmä, voimaantulo tai muu ei-deonttinen sisältö</li>
+      </ul>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <h3>Regex-luokitin</h3>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <h4>Säännöstön rakentaminen LLM-aineiston pohjalta</h4>
+      <p>LLM-annotaatioiden perusteella tunnistettiin suomen kielen
+      tyypilliset deonttista modaliteettia ilmaisevat rakenteet. Näistä
+      koostettiin prioriteettijärjestyksessä toimiva regex-luokitin:</p>
+      <ul>
+        <li>Prioriteetti 1: ei-deonttisten rakenteiden ankkerit
+            (<em>tulee voimaan, tarkoitetaan, ei sovelleta</em>)</li>
+        <li>Prioriteetti 2: velvoite — nesessiteettirakenteet
+            (<em>on tehtävä, tulee, pitää, on velvollinen</em>)</li>
+        <li>Prioriteetti 3: eksplisiittiset kiellot
+            (<em>ei saa, on kielletty, kielletään</em>)</li>
+        <li>Prioriteetti 4: suositus — konditionaali
+            (<em>tulisi, olisi syytä, on pyrittävä</em>)</li>
+        <li>Prioriteetti 5: lupa — modaaliverbit
+            (<em>voi, voidaan, saa, on oikeus</em>)</li>
+        <li>Prioriteetti 6: velvoite — aktiiviset toimintaverbit
+            (<em>vastaa, valvoo, huolehtii</em>)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <h4>Validointi ja iteraatio</h4>
+      <p>Regex-luokitin validoitiin vertaamalla sen tuloksia LLM-annotaatioihin.
+      Virheanalyysin perusteella säännöstöä parannettiin iteratiivisesti —
+      esimerkiksi liian herkästi laukaisseet kieltorakenteet korvattiin
+      tarkemmilla ilmaisuilla, ja prioriteettijärjestystä muutettiin niin
+      että velvoite voittaa kiellon pykälissä joissa molemmat esiintyvät.</p>
+      <p>Tämänhetkinen kokonaistarkkuus: <strong>{pct(all_stats['acc'])}</strong>
+      (n={all_stats['total']:,}).</p>
+    </div>
+  </div>
+
 </div>
+</div><!-- /tab-info -->
 
 <script>
 const ROWS = {data_json};
@@ -371,6 +539,14 @@ function applyFilters() {{
 }}
 
 applyFilters();
+
+// ── Välilehtien vaihto ────────────────────────────────────────────────────────
+function switchTab(name) {{
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[onclick="switchTab('${{name}}')"]`).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}}
 </script>
 </body>
 </html>
