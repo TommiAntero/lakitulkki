@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing & type checking
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Isot datatiedostot — generoidaan parsimalla
+data/*.csv
+data/*.parquet
+data/sections/
+
+# Poikkeus: jaetut HTML-raportit pysyvät versiohallinnassa
+!data/*.html
+
+# Parserin syötteet (ZIP-arkistot, XML-tiedostot)
+parser/input/
+
+# Excel-tiedostot (lähdedata)
+*.xlsx
