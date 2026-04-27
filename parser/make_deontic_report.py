@@ -43,6 +43,7 @@ CAT_COLOR = {
 
 print("Luetaan ja luokitellaan...")
 rows = []
+law_ids = set()
 with open(IN_CSV, encoding="utf-8", newline="") as f:
     for row in csv.DictReader(f):
         llm   = row.get("modaliteetti", "").strip().lower()
@@ -50,7 +51,11 @@ with open(IN_CSV, encoding="utf-8", newline="") as f:
         org   = row.get("org_tyyppi", "").strip()
         if not llm or not text:
             continue
+        # Suodata pois LLM:n virheelliset / epäselvät rivit
+        if llm in {"virhe", "ehto", "viittauslause"}:
+            continue
         regex = classify(text)
+        law_ids.add(row.get("law_id", ""))
         rows.append({
             "llm":   llm,
             "regex": regex,
@@ -61,7 +66,9 @@ with open(IN_CSV, encoding="utf-8", newline="") as f:
             "ok":    llm == regex,
         })
 
+n_laws = len(law_ids - {""})
 print(f"  Rivejä: {len(rows):,}")
+print(f"  Lakeja: {n_laws}")
 
 # ── Tilastot ──────────────────────────────────────────────────────────────────
 
@@ -341,20 +348,32 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 <div id="info-content">
 
   <h2>Deonttinen analyysi — menetelmä ja aineisto</h2>
-  <p>Tämä työkalu vertaa kielimallipohjaista (LLM) annotaatiota
-  regex-pohjaisen luokittimen tuloksiin. Alla kuvataan analyysin vaiheet.</p>
+  <p>Tämä työkalu luokittelee Suomen voimassa olevien lakien pykälät
+  deonttisen modaliteetin mukaan: <em>velvoite, lupa, kielto, suositus</em> tai
+  <em>ei-deontti</em>. Raportti vertaa kahta luokittelumenetelmää:
+  kielimalliperustaista (LLM) annotaatiota ja sääntöperustaista
+  (regex) luokitinta. Tarkoituksena on tuottaa skaalautuva ja paikallisesti
+  ajettava menetelmä lakitekstin velvoittavuusrakenteen analyysiin.</p>
+
+  <p style="background:#fff8e1;padding:12px 16px;border-left:3px solid #d68910;border-radius:4px">
+    <strong>Käyttöohje:</strong> Tulokset-välilehdellä voit selata kaikkia
+    luokiteltuja pykäliä. Suodata näkymää organisaatiotyypin, luokan tai
+    tekstihaun perusteella. <em>Vain virheet</em> -valinta näyttää tapaukset,
+    joissa LLM ja regex eroavat toisistaan.
+  </p>
 
   <hr class="divider">
-  <h3>Aineiston hankinta ja käsittely</h3>
+  <h3>1. Aineiston hankinta ja käsittely</h3>
 
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-body">
       <h4>Lainsäädännön lataus ja parsinta</h4>
-      <p>Finlexin avoimen datan arkistosta ladattiin kaikki voimassa olevat
-      suomenkieliset säädökset AKN-muotoisina XML-tiedostoina (~4 GB ZIP).
+      <p>Lähdeaineistona on Finlexin avoin data: kaikki voimassa olevat
+      suomenkieliset säädökset koneluettavassa AKN-muotoisessa XML-rakenteessa.
       Jokaisesta laista poimittiin rakenteiset elementit: luvut, pykälät,
-      momentit ja alakohdat.</p>
+      momentit ja alakohdat. Aineiston laajuus on noin 4 GB pakattuna ja
+      <strong>124 414 pykälää</strong>.</p>
     </div>
   </div>
 
@@ -362,11 +381,12 @@ td {{ padding: 7px 12px; vertical-align: top; }}
     <div class="step-num">2</div>
     <div class="step-body">
       <h4>Pykälätasoinen aggregointi</h4>
-      <p>Elementtitason rivit koottiin pykälätason tietueiksi: jokaisen
-      pykälän kaikki lapsielementit (momentit, alakohdat) yhdistettiin
-      yhdeksi tekstikentäksi. Näin LLM ja luokitin saavat koko asiayhteyden
-      eikä vain yksittäistä virkettä. Aineistossa on yhteensä
-      <strong>124 414 pykälää</strong>.</p>
+      <p>Yksittäiset XML-elementit koottiin pykälätason tietueiksi: jokaisen
+      pykälän kaikki lapsielementit (momentit, alakohdat) yhdistettiin yhdeksi
+      tekstikentäksi. Näin sekä kielimalli että regex-luokitin saavat koko
+      asiayhteyden eikä vain yksittäistä virkettä — tämä on välttämätöntä,
+      sillä deonttinen modaliteetti määräytyy usein ympäröivän kontekstin
+      perusteella.</p>
     </div>
   </div>
 
@@ -374,65 +394,67 @@ td {{ padding: 7px 12px; vertical-align: top; }}
     <div class="step-num">3</div>
     <div class="step-body">
       <h4>Otoksen rajaus tiedonhallintakartan mukaan</h4>
-      <p>Analyysiin valittiin lait, jotka esiintyvät
-      <em>Tiedonhallintakartta_tehtävät</em>-aineistossa. Lait ryhmiteltiin
-      organisaatiotyypeittäin:</p>
+      <p>Analyysiin valittiin lait, jotka esiintyvät julkishallinnon
+      tiedonhallintakartassa. Lait ryhmiteltiin organisaatiotyypeittäin:</p>
       <ul>
         <li><span class="pill" style="background:#c0392b">Hyvinvointialue</span>
-            35 lakia → <strong>2 163 pykälää</strong> (kaikki mukaan)</li>
+            <strong>{org_stats['HYVINVOINTIALUE']['total']:,} pykälää</strong> (kaikki mukaan)</li>
         <li><span class="pill" style="background:#2471a3">Kunta</span>
-            98 lakia → 8 104 pykälää → <strong>2 000 satunnaisotosta</strong></li>
+            <strong>{org_stats['KUNTA']['total']:,} pykälää</strong> (satunnaisotos)</li>
         <li><span class="pill" style="background:#1e8449">Valtio</span>
-            206 lakia → 10 830 pykälää → <strong>2 000 satunnaisotosta</strong></li>
+            <strong>{org_stats['VALTIO']['total']:,} pykälää</strong> (satunnaisotos)</li>
       </ul>
-      <p>Otos yhteensä: <strong>6 163 pykälää</strong>.</p>
+      <p>Otos yhteensä: <strong>{all_stats['total']:,} pykälää</strong>
+      ({n_laws} eri laista).</p>
     </div>
   </div>
 
   <hr class="divider">
-  <h3>LLM-annotointi</h3>
+  <h3>2. Luokittelu</h3>
 
   <div class="step">
     <div class="step-num">4</div>
     <div class="step-body">
-      <h4>Deonttinen luokittelu kielimallilla</h4>
-      <p>Jokainen pykälä annotoitiin kielimallin avulla deonttiseen
-      modaliteettiin. Malli sai pykälän tekstin ja lain otsikon, ja palautti
-      luokan sekä lyhyen perustelun.</p>
-      <p>Luokat:</p>
+      <h4>Kielimallipohjainen annotaatio (referenssi)</h4>
+      <p>Jokainen pykälä luokiteltiin kielimallilla. Malli sai pykälän tekstin
+      ja lain otsikon, ja palautti deonttisen luokan sekä lyhyen perustelun
+      luonnollisella kielellä. Tätä annotaatiota käytetään referenssinä, johon
+      sääntöpohjaista luokittelua verrataan.</p>
+      <p>Käytetyt luokat:</p>
       <ul>
         <li><span class="pill" style="background:#2471a3">velvoite</span> — subjektilla on velvollisuus toimia</li>
         <li><span class="pill" style="background:#1e8449">lupa</span> — subjektilla on oikeus tai mahdollisuus toimia</li>
         <li><span class="pill" style="background:#c0392b">kielto</span> — toiminta on nimenomaisesti kielletty</li>
-        <li><span class="pill" style="background:#d68910">suositus</span> — konditionaali tai pyrkiminen ilman velvoitetta</li>
-        <li><span class="pill" style="background:#7f8c8d">ei_deontti</span> — määritelmä, voimaantulo tai muu ei-deonttinen sisältö</li>
+        <li><span class="pill" style="background:#d68910">suositus</span> — konditionaali tai pyrkiminen ilman ehdotonta velvoitetta</li>
+        <li><span class="pill" style="background:#7f8c8d">ei_deontti</span> — määritelmä, voimaantulo tai muu ei-velvoittava sisältö</li>
       </ul>
     </div>
   </div>
 
-  <hr class="divider">
-  <h3>Regex-luokitin</h3>
-
   <div class="step">
     <div class="step-num">5</div>
     <div class="step-body">
-      <h4>Säännöstön rakentaminen LLM-aineiston pohjalta</h4>
-      <p>LLM-annotaatioiden perusteella tunnistettiin suomen kielen
-      tyypilliset deonttista modaliteettia ilmaisevat rakenteet. Näistä
-      koostettiin prioriteettijärjestyksessä toimiva regex-luokitin:</p>
+      <h4>Sääntöpohjainen regex-luokitin</h4>
+      <p>Kielimalliannotaatioiden perusteella tunnistettiin suomen
+      lakikielelle tyypilliset deonttista modaliteettia ilmaisevat
+      rakenteet. Näistä koostettiin neljätasoinen prioriteettijärjestelmä,
+      jossa vahvimmat ja yksiselitteisimmät signaalit tunnistetaan ensin:</p>
       <ul>
-        <li>Prioriteetti 1: ei-deonttisten rakenteiden ankkerit
-            (<em>tulee voimaan, tarkoitetaan, ei sovelleta</em>)</li>
-        <li>Prioriteetti 2: velvoite — nesessiteettirakenteet
-            (<em>on tehtävä, tulee, pitää, on velvollinen</em>)</li>
-        <li>Prioriteetti 3: eksplisiittiset kiellot
-            (<em>ei saa, on kielletty, kielletään</em>)</li>
-        <li>Prioriteetti 4: suositus — konditionaali
-            (<em>tulisi, olisi syytä, on pyrittävä</em>)</li>
-        <li>Prioriteetti 5: lupa — modaaliverbit
-            (<em>voi, voidaan, saa, on oikeus</em>)</li>
-        <li>Prioriteetti 6: velvoite — aktiiviset toimintaverbit
-            (<em>vastaa, valvoo, huolehtii</em>)</li>
+        <li><strong>Taso 1 — vahvat passiivirakenteet:</strong>
+            nesessitiivimuoto (<em>on tehtävä, on huolehdittava, on otettava</em>),
+            sekä eksplisiittiset velvoite- ja kieltoilmaukset
+            (<em>velvoitetaan, ei saa, kielletään</em>).</li>
+        <li><strong>Taso 2 — ei-deonttiset ankkurit:</strong>
+            voimaantulo, määritelmät ja soveltamisrajaukset
+            (<em>tulee voimaan, tarkoitetaan, ei sovelleta</em>).</li>
+        <li><strong>Taso 3 — modaaliset verbirakenteet:</strong>
+            velvoitemodaalit infinitiivin kanssa (<em>tulee tehdä, pitää järjestää</em>),
+            spesifit kiellot (<em>ei voida, ei myönnetä</em>),
+            suositusrakenteet (<em>tulisi, olisi syytä, suositellaan</em>),
+            sekä lupasignaalit (<em>voi, voidaan, saa, on oikeus</em>).</li>
+        <li><strong>Taso 4 — aktiiviset toimivaltaverbit:</strong>
+            organisaation toiminnan velvoittavuutta ilmaisevat verbit
+            (<em>vastaa, valvoo, huolehtii, päättää, vahvistaa</em>).</li>
       </ul>
     </div>
   </div>
@@ -440,16 +462,53 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   <div class="step">
     <div class="step-num">6</div>
     <div class="step-body">
-      <h4>Validointi ja iteraatio</h4>
-      <p>Regex-luokitin validoitiin vertaamalla sen tuloksia LLM-annotaatioihin.
-      Virheanalyysin perusteella säännöstöä parannettiin iteratiivisesti —
-      esimerkiksi liian herkästi laukaisseet kieltorakenteet korvattiin
-      tarkemmilla ilmaisuilla, ja prioriteettijärjestystä muutettiin niin
-      että velvoite voittaa kiellon pykälissä joissa molemmat esiintyvät.</p>
-      <p>Tämänhetkinen kokonaistarkkuus: <strong>{pct(all_stats['acc'])}</strong>
-      (n={all_stats['total']:,}).</p>
+      <h4>Validointi ja iteratiivinen kehitys</h4>
+      <p>Regex-luokittimen tarkkuutta arvioidaan vertaamalla sen tuotosta
+      kielimalliannotaatioon. Virheanalyysin pohjalta säännöstöä on
+      hiottu useassa kierroksessa: liian herkästi laukaisseet rakenteet
+      tarkennettiin, ja prioriteettijärjestystä muokattiin niin että vahvat
+      velvoittavat rakenteet voittavat määrittelyilmaukset silloin kun
+      pykälässä esiintyy molempia.</p>
+      <p>Tämänhetkinen kokonaistarkkuus on
+      <strong>{pct(all_stats['acc'])}</strong> ({all_stats['total']:,}
+      pykälän otoksella).</p>
     </div>
   </div>
+
+  <hr class="divider">
+  <h3>3. Tulosten tulkinta</h3>
+
+  <p>Confusion matrix taulukon yläosassa näyttää, miten luokat sekoittuvat
+  toisiinsa. Diagonaalin solut kertovat oikein luokitellut tapaukset; muut
+  solut paljastavat tyypilliset virhetyypit (esim. luokkien <em>lupa</em> ja
+  <em>velvoite</em> rajatapaukset, joissa pykälä sisältää sekä mahdollistavan
+  että velvoittavan rakenteen).</p>
+
+  <p>Per-luokka-tilastoissa esitetään:</p>
+  <ul>
+    <li><strong>Precision</strong> — kuinka usein regex on oikeassa, kun se
+        antaa kyseisen luokan</li>
+    <li><strong>Recall</strong> — kuinka iso osa kyseisen luokan
+        tapauksista regex tunnistaa</li>
+    <li><strong>F1</strong> — Precisionin ja Recallin harmoninen keskiarvo</li>
+    <li><strong>TP/FN/FP</strong> — oikeat osumat / vääriksi negatiiviksi
+        jääneet / vääriksi positiivisiksi luokitellut</li>
+  </ul>
+
+  <hr class="divider">
+  <h3>4. Menetelmän rajat</h3>
+
+  <p>Sääntöpohjaisen regex-luokittimen tarkkuus jää lakitekstillä noin
+  70 % tasolle. Pääsyy on lakikielen rakenteellinen monitulkintaisuus:
+  yksittäinen pykälä voi sisältää sekä luvan että velvoitteen, ja se
+  miten näitä painotetaan riippuu lauseyhteydestä. Sääntöperustainen
+  luokitin valitsee aina ensimmäisen tunnistamansa signaalin, kun taas
+  kielimalli pystyy painottamaan kontekstin perusteella.</p>
+
+  <p>Tämä raportti dokumentoi kahden menetelmän vertailun. Korkeamman
+  tarkkuuden saavuttaminen ilman ulkoista kielimalliriippuvuutta vaatii
+  todennäköisesti suomenkielisen kielimallin (esim. FinBERT) ja sen
+  pohjalle koulutetun keveän luokittelijan.</p>
 
 </div>
 </div><!-- /tab-info -->

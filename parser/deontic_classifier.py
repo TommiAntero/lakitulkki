@@ -19,7 +19,29 @@ import polars as pl
 
 RULES: list[tuple[str, list[str]]] = [
 
-    # 1. EI_DEONTTI — voimaantulo, määritelmät ja soveltamisalarajaukset ensin
+    # TIER 1A — vahvat passiiviset velvoitesignaalit
+    # Nostettu ei_deontin yli: jos pykälässä on "on Xtava/tävä", se on velvoite
+    # vaikka kappale alkaisi määrittelyllä ("tässä laissa tarkoitettujen X on toteutettava Y").
+    # Yhdistetty -ttava ja -tava: kattaa myös "julkaistava", "saatava", "annettava".
+    ("velvoite", [
+        r"\bon\b(?:\s+\S+){0,6}\s+\w+t(?:ava|ävä)\b",
+        r"\bon\s+oltava\b",
+        r"\bon\s+velvollinen\b",
+        r"\bon\s+velvollisuus\b",
+        r"\bvelvoitetaan\b",
+        r"\bvaaditaan\b",
+    ]),
+
+    # TIER 1B — vahvat kieltosignaalit (eksplisiittiset)
+    ("kielto", [
+        r"\bei\s+saa\b",
+        r"\bon\s+kielletty\b",
+        r"\bon\s+kiellettyä\b",
+        r"\bkielletään\b",
+        r"\bälköön\b",
+    ]),
+
+    # TIER 2 — EI_DEONTTI: voimaantulo, määritelmät ja soveltamisalarajaukset
     ("ei_deontti", [
         r"tulee?\s+voimaan",
         r"tullessa\s+voimaan",
@@ -32,37 +54,24 @@ RULES: list[tuple[str, list[str]]] = [
         r"tässä\s+momentissa\s+tarkoitet",
         r"kumotaan",
         r"muutetaan\s+seuraavasti",
-        r"\bei\s+sovelleta\b",   # soveltamisalarajaus, ei varsinainen kielto
+        r"\bei\s+sovelleta\b",
     ]),
 
-    # 2. VELVOITE — nostettu ennen kielto: jos pykälässä on sekä velvoite-
-    #    että kieltosignaali, velvoite voittaa (tyypillinen rakenne: velvoite
-    #    pääsisältönä + poikkeusehto "ei saa" sivulauseessa)
+    # TIER 3A — velvoitemodaalit, vain kun seuraa infinitiivi
+    # `tulee/pitää/täytyy` yksinään liian geneerisiä — vaadi vähintään 4-merkkinen
+    # vokaaliin (a/ä) päättyvä sana (tyypillinen suomen kielen infinitiivipääte).
+    # Kattaa: "tulee sopia/tehdä/järjestää/noudattaa/kiinnittää" jne.
     ("velvoite", [
-        r"\bon\b(?:\s+\S+){0,4}\s+\w+ttava\b",
-        r"\bon\b(?:\s+\S+){0,4}\s+\w+tävä\b",
-        r"\bon\b(?:\s+\S+){0,4}\s+\w+ttavä\b",
-        r"\btulee\b",
-        r"\bpitää\b",
-        r"\btäytyy\b",
-        r"\bon\s+velvollisuus\b",
-        r"\bvelvoitetaan\b",
-        r"\bvaaditaan\b",
-        r"\bon\s+velvollinen\b",
-        r"\bon\s+oltava\b",
+        r"\btulee\s+\w{3,}[aä]\b",
+        r"\btäytyy\s+\w{3,}[aä]\b",
+        r"\bpitää\s+\w{3,}[aä]\b",
     ]),
 
-    # 3. KIELTO — eksplisiittiset kiellot ja spesifit passiivikiellot
-    #    Geneerinen \bei\s+\w+eta\b poistettu (aiheutti satoja FP pitkässä tekstissä)
+    # TIER 3B — spesifit passiivikiellot
     ("kielto", [
-        r"\bei\s+saa\b",
         r"\bei\s+voida?\b",
         r"\bei\s+ole\s+oikeutta\b",
         r"\bei\s+ole\s+lupa\b",
-        r"\bon\s+kielletty\b",
-        r"\bkielletään\b",
-        r"\bon\s+kiellettyä\b",
-        r"\bälköön\b",
         r"\bei\s+myönnetä\b",
         r"\bei\s+hyväksytä\b",
         r"\bei\s+suoriteta\b",
@@ -71,7 +80,7 @@ RULES: list[tuple[str, list[str]]] = [
         r"\bei\s+makseta\b",
     ]),
 
-    # 4. SUOSITUS — konditionaali ja pyrkiminen
+    # TIER 3C — SUOSITUS (konditionaali ja pyrkiminen)
     ("suositus", [
         r"\btulisi\b",
         r"\bolisi\s+syytä\b",
@@ -85,7 +94,7 @@ RULES: list[tuple[str, list[str]]] = [
         r"tulee\s+pyrkiä",
     ]),
 
-    # 5. LUPA — modaaliverbit
+    # TIER 3D — LUPA (modaaliverbit)
     ("lupa", [
         r"\bvoi\b",
         r"\bvoidaan\b",
@@ -100,7 +109,10 @@ RULES: list[tuple[str, list[str]]] = [
         r"\bei\s+tarvitse\b",
     ]),
 
-    # 6. VELVOITE — aktiiviset 3. persoonan velvoiteverbit (matala prioriteetti)
+    # TIER 4 — aktiiviset 3. persoonan velvoiteverbit (matalin prioriteetti)
+    # Lisatty tyypilliset toimivaltaverbit: tekee, antaa, jarjestaa, toteuttaa,
+    # laatii, maksaa. Naiden FP-riski on hallittu, koska tama tier fire-aa vain
+    # jos mikaan ylempi sannot ei matchaa.
     ("velvoite", [
         r"\bvastaa\b",
         r"\bvastaavat\b",
@@ -114,6 +126,21 @@ RULES: list[tuple[str, list[str]]] = [
         r"\bhuolehtivat\b",
         r"\bvalvoo\b",
         r"\bvalvovat\b",
+        r"\btekee\b",
+        r"\btekevät\b",
+        r"\bjärjestää\b",
+        r"\bjärjestävät\b",
+        r"\btoteuttaa\b",
+        r"\blaatii\b",
+        r"\bnoudattaa\b",
+        r"\bedistää\b",
+        r"\bturvaa\b",
+        r"\bvarmistaa\b",
+        r"\bsuorittaa\b",
+        r"\bantaa\b",
+        r"\bmaksaa\b",
+        r"\bilmoittaa\b",
+        r"\bkäsittelee\b",
     ]),
 ]
 
