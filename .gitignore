@@ -45,8 +45,9 @@ data/*.csv
 data/*.parquet
 data/sections/
 
-# Poikkeus: jaetut HTML-raportit pysyvät versiohallinnassa
+# Poikkeus: jaetut HTML-raportit ja asiakkaan tarvitsemat CSV:t versiohallinnassa
 !data/*.html
+!data/toimija_velvoitteet.csv
 
 # Parserin syötteet (ZIP-arkistot, XML-tiedostot)
 parser/input/

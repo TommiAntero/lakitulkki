@@ -57,6 +57,7 @@ with open(IN_CSV, encoding="utf-8", newline="") as f:
         regex = classify(text)
         law_ids.add(row.get("law_id", ""))
         rows.append({
+            "i":     len(rows),
             "llm":   llm,
             "regex": regex,
             "org":   org,
@@ -64,11 +65,63 @@ with open(IN_CSV, encoding="utf-8", newline="") as f:
             "num":   row.get("num", "") or row.get("eId", ""),
             "text":  text[:400],
             "ok":    llm == regex,
+            "subj":  (row.get("oikeussubjekti") or "").strip(),
+            "perust": (row.get("perustelu") or "").strip()[:300],
         })
 
 n_laws = len(law_ids - {""})
 print(f"  Rivejä: {len(rows):,}")
 print(f"  Lakeja: {n_laws}")
+
+# ── Toimija-aggregaatti ──────────────────────────────────────────────────────
+# LLM kirjasi kullekin pykälälle oikeussubjektin (toimijan). Aggregoidaan se
+# normalisoidulla nimellä: ryhmitellään pieni-/isokirjainerot ja triviaalit
+# kirjoitusasut. Säilytetään yleisin kirjoitusasu näytettäväksi.
+from collections import Counter
+
+def norm_subj(s):
+    return s.strip().lower() if s else ""
+
+subj_groups: dict[str, list[int]] = defaultdict(list)
+subj_display: dict[str, Counter] = defaultdict(Counter)
+for r in rows:
+    if not r["subj"]:
+        continue
+    key = norm_subj(r["subj"])
+    subj_groups[key].append(r["i"])
+    subj_display[key][r["subj"]] += 1
+
+toimijat = []
+for key, idxs in subj_groups.items():
+    counts = Counter(rows[i]["llm"] for i in idxs)
+    display = subj_display[key].most_common(1)[0][0]
+    toimijat.append({
+        "name":    display,
+        "key":     key,
+        "total":   len(idxs),
+        "velvoite":  counts.get("velvoite", 0),
+        "lupa":      counts.get("lupa", 0),
+        "kielto":    counts.get("kielto", 0),
+        "suositus":  counts.get("suositus", 0),
+        "ei_deontti": counts.get("ei_deontti", 0),
+        "rows":    idxs,
+    })
+toimijat.sort(key=lambda t: t["total"], reverse=True)
+n_with_subj = sum(1 for r in rows if r["subj"])
+print(f"  Toimijoita: {len(toimijat):,} (oikeussubjekti tunnistettu {n_with_subj:,}/{len(rows):,} rivillä)")
+
+# Tallennetaan myos CSV asiakkaan kayttoon
+TOIMIJA_CSV = ROOT / "data" / "toimija_velvoitteet.csv"
+with open(TOIMIJA_CSV, "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["organisaatio", "modaliteetti", "org_tyyppi", "law_title",
+                "pykala", "perustelu", "teksti"])
+    for r in rows:
+        if not r["subj"]:
+            continue
+        w.writerow([r["subj"], r["llm"], r["org"], r["law"],
+                    r["num"], r["perust"], r["text"]])
+print(f"  CSV: {TOIMIJA_CSV.name}")
 
 # ── Tilastot ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +162,7 @@ stats_json = json.dumps({
     "conf": {k: dict(v) for k, v in conf.items()},
     "colors": CAT_COLOR,
 }, ensure_ascii=False, separators=(",", ":"))
+toimijat_json = json.dumps(toimijat, ensure_ascii=False, separators=(",", ":"))
 
 print(f"  JSON: {len(data_json)//1024:,} KB")
 
@@ -272,6 +326,60 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   vertical-align: middle;
 }}
 .divider {{ border: none; border-top: 1px solid #dfe6e9; margin: 24px 0; }}
+
+/* ── Toimija-välilehti ── */
+#toimija-layout {{ display: flex; flex: 1; overflow: hidden; }}
+#toimija-list {{
+  width: 480px; flex-shrink: 0; border-right: 1px solid #dfe6e9;
+  background: #fff; overflow-y: auto;
+}}
+#toimija-list table {{ width: 100%; border-collapse: collapse; }}
+#toimija-list th {{
+  position: sticky; top: 0; background: #f8f9fa; padding: 8px 10px;
+  text-align: left; font-size: 11px; color: #636e72;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 2px solid #dfe6e9; z-index: 1;
+}}
+#toimija-list td {{ padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }}
+#toimija-list tr {{ cursor: pointer; }}
+#toimija-list tr:hover {{ background: #f8f9fa; }}
+#toimija-list tr.selected {{ background: #e3f2fd; }}
+#toimija-list tr.selected td {{ font-weight: 600; }}
+.t-count {{
+  display: inline-block; min-width: 28px; padding: 1px 6px;
+  border-radius: 10px; font-size: 11px; color: #fff;
+  text-align: center; font-weight: 600;
+}}
+#toimija-detail {{
+  flex: 1; overflow-y: auto; padding: 16px 24px; background: #f0f2f5;
+}}
+#toimija-detail h3 {{
+  font-size: 16px; font-weight: 700; margin-bottom: 6px; color: #2d3436;
+}}
+#toimija-detail .summary {{
+  display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+}}
+#toimija-detail .pykala {{
+  background: #fff; border: 1px solid #dfe6e9; border-radius: 4px;
+  padding: 12px 14px; margin-bottom: 8px;
+}}
+#toimija-detail .pykala-header {{
+  display: flex; gap: 8px; align-items: center; margin-bottom: 6px;
+  font-size: 12px;
+}}
+#toimija-detail .pykala-text {{
+  color: #2d3436; line-height: 1.5; font-size: 13px;
+}}
+#toimija-detail .perustelu {{
+  color: #636e72; font-size: 12px; font-style: italic;
+  margin-top: 6px; padding-top: 6px; border-top: 1px dashed #dfe6e9;
+}}
+#toimija-search {{ padding: 8px 10px; border-bottom: 1px solid #dfe6e9; background: #fff; }}
+#toimija-search input {{ width: 100%; padding: 6px 10px; }}
+#toimija-filters {{
+  padding: 8px 16px; background: #fff; border-bottom: 1px solid #dfe6e9;
+  display: flex; gap: 12px; align-items: center; flex-shrink: 0;
+}}
 </style>
 </head>
 <body>
@@ -284,6 +392,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 
 <div id="tabs">
   <div class="tab active" onclick="switchTab('report')">Tulokset</div>
+  <div class="tab" onclick="switchTab('toimijat')">Toimijat &amp; tehtävät</div>
   <div class="tab" onclick="switchTab('info')">&#9432; Tietoa analyysista</div>
 </div>
 
@@ -342,6 +451,58 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 </div>
 
 </div><!-- /tab-report -->
+
+<!-- ── TOIMIJAT-VÄLILEHTI ── -->
+<div id="tab-toimijat" class="tab-content">
+
+<div id="toimija-filters">
+  <strong style="font-size:13px">Toimijat ja niihin kohdistuvat säännökset</strong>
+  <span class="light" id="toimija-summary"></span>
+  <label style="margin-left:auto">Org-tyyppi:</label>
+  <select id="t-org" onchange="renderToimijat()">
+    <option value="">Kaikki</option>
+    <option>HYVINVOINTIALUE</option>
+    <option>KUNTA</option>
+    <option>VALTIO</option>
+  </select>
+  <label>Modaliteetti:</label>
+  <select id="t-mod" onchange="renderToimijat()">
+    <option value="">Kaikki</option>
+    <option value="velvoite">velvoite</option>
+    <option value="lupa">lupa</option>
+    <option value="kielto">kielto</option>
+    <option value="suositus">suositus</option>
+    <option value="ei_deontti">ei_deontti</option>
+  </select>
+</div>
+
+<div id="toimija-layout">
+  <div id="toimija-list">
+    <div id="toimija-search">
+      <input type="text" id="t-search" placeholder="Hae toimijaa..." oninput="renderToimijat()">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Toimija</th>
+          <th class="num" style="text-align:right">Yht.</th>
+          <th class="num" style="text-align:right">velv</th>
+          <th class="num" style="text-align:right">lupa</th>
+          <th class="num" style="text-align:right">kiel</th>
+          <th class="num" style="text-align:right">suos</th>
+        </tr>
+      </thead>
+      <tbody id="t-tbody"></tbody>
+    </table>
+  </div>
+  <div id="toimija-detail">
+    <p class="light" style="margin-top:40px;text-align:center">
+      Valitse toimija vasemmalta nähdäksesi kaikki sitä koskevat pykälät.
+    </p>
+  </div>
+</div>
+
+</div><!-- /tab-toimijat -->
 
 <!-- ── INFO-VÄLILEHTI ── -->
 <div id="tab-info" class="tab-content">
@@ -516,6 +677,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 <script>
 const ROWS = {data_json};
 const STATS = {stats_json};
+const TOIMIJAT = {toimijat_json};
 const COLORS = STATS.colors;
 
 // ── Confusion matrix ──────────────────────────────────────────────────────────
@@ -598,6 +760,118 @@ function applyFilters() {{
 }}
 
 applyFilters();
+
+// ── Toimijat-välilehti ────────────────────────────────────────────────────────
+let selectedToimija = null;
+
+function renderToimijat() {{
+  const orgFilter = document.getElementById('t-org').value;
+  const modFilter = document.getElementById('t-mod').value;
+  const q         = document.getElementById('t-search').value.toLowerCase();
+
+  // Suodatetaan toimijat: laske uudelleen lukumäärät valitun org-tyypin / modaliteetin mukaan
+  let list = TOIMIJAT.map(t => {{
+    let rows = t.rows.map(i => ROWS[i]);
+    if (orgFilter) rows = rows.filter(r => r.org === orgFilter);
+    if (modFilter) rows = rows.filter(r => r.llm === modFilter);
+    if (rows.length === 0) return null;
+    const counts = {{velvoite:0, lupa:0, kielto:0, suositus:0, ei_deontti:0}};
+    rows.forEach(r => counts[r.llm]++);
+    return {{
+      name: t.name, key: t.key, total: rows.length,
+      rows: rows.map(r => r.i),
+      ...counts
+    }};
+  }}).filter(t => t !== null);
+
+  if (q) list = list.filter(t => t.name.toLowerCase().includes(q));
+  list.sort((a, b) => b.total - a.total);
+
+  document.getElementById('toimija-summary').textContent =
+    `${{list.length.toLocaleString('fi')}} toimijaa, yhteensä ${{
+      list.reduce((s, t) => s + t.total, 0).toLocaleString('fi')
+    }} pykäläosumaa`;
+
+  let html = '';
+  list.slice(0, 300).forEach(t => {{
+    const sel = (selectedToimija === t.key) ? 'selected' : '';
+    const pill = (n, cat) => n > 0
+      ? `<span class="t-count" style="background:${{COLORS[cat]}}">${{n}}</span>`
+      : '<span class="light">·</span>';
+    html += `<tr class="${{sel}}" onclick="selectToimija('${{t.key.replace(/'/g, "\\'")}}')">
+      <td>${{t.name}}</td>
+      <td class="num">${{t.total}}</td>
+      <td class="num">${{pill(t.velvoite, 'velvoite')}}</td>
+      <td class="num">${{pill(t.lupa, 'lupa')}}</td>
+      <td class="num">${{pill(t.kielto, 'kielto')}}</td>
+      <td class="num">${{pill(t.suositus, 'suositus')}}</td>
+    </tr>`;
+  }});
+  if (list.length > 300) {{
+    html += `<tr><td colspan="6" style="text-align:center;color:#999;padding:8px">
+      ... ${{list.length - 300}} toimijaa piilotettu — tarkenna hakua
+    </td></tr>`;
+  }}
+  document.getElementById('t-tbody').innerHTML = html;
+
+  // Päivitä detail-paneli, jos valittu toimija on listassa
+  if (selectedToimija) {{
+    const t = list.find(x => x.key === selectedToimija);
+    if (t) renderToimijaDetail(t);
+  }}
+}}
+
+function selectToimija(key) {{
+  selectedToimija = key;
+  renderToimijat();
+}}
+
+function renderToimijaDetail(t) {{
+  const detail = document.getElementById('toimija-detail');
+  const orgFilter = document.getElementById('t-org').value;
+  const modFilter = document.getElementById('t-mod').value;
+
+  let rows = t.rows.map(i => ROWS[i]);
+
+  // Järjestä: velvoite → lupa → kielto → suositus → ei_deontti
+  const order = {{velvoite:0, lupa:1, kielto:2, suositus:3, ei_deontti:4}};
+  rows.sort((a, b) => (order[a.llm] - order[b.llm]) || a.law.localeCompare(b.law));
+
+  const summary = ['velvoite','lupa','kielto','suositus','ei_deontti']
+    .filter(c => t[c] > 0)
+    .map(c => `<span class="badge" style="background:${{COLORS[c]}}">${{c}} ${{t[c]}}</span>`)
+    .join(' ');
+
+  let html = `
+    <h3>${{t.name}}</h3>
+    <div class="summary">${{summary}}</div>
+    <p class="light" style="margin-bottom:12px;font-size:12px">
+      ${{t.total}} pykälää${{orgFilter ? ' · ' + orgFilter : ''}}${{modFilter ? ' · vain ' + modFilter : ''}}
+    </p>`;
+
+  rows.slice(0, 200).forEach(r => {{
+    html += `<div class="pykala">
+      <div class="pykala-header">
+        ${{badge(r.llm)}}
+        <span class="org-badge">${{r.org}}</span>
+        <span style="font-weight:500">${{r.law}}</span>
+        <span class="light">· ${{r.num}}</span>
+      </div>
+      <div class="pykala-text">${{r.text}}</div>
+      ${{r.perust ? `<div class="perustelu">"${{r.perust}}"</div>` : ''}}
+    </div>`;
+  }});
+
+  if (rows.length > 200) {{
+    html += `<p class="light" style="text-align:center;padding:12px">
+      ... ${{rows.length - 200}} pykälää piilotettu
+    </p>`;
+  }}
+
+  detail.innerHTML = html;
+}}
+
+renderToimijat();
 
 // ── Välilehtien vaihto ────────────────────────────────────────────────────────
 function switchTab(name) {{
