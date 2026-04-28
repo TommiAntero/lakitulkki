@@ -29,7 +29,8 @@ IN_CSV   = ROOT / "data" / "deontic_thk_sample.csv"
 OUT_HTML = ROOT / "data" / "deontic_report.html"
 
 CATS = ["velvoite", "lupa", "kielto", "suositus", "ei_deontti"]
-ORGS = ["HYVINVOINTIALUE", "KUNTA", "VALTIO"]
+ORGS = ["HYVINVOINTIALUE", "KUNTA", "VALTIO",
+        "RIKOS", "VERO", "YKSITYIS", "YRITYS", "TYO", "HALLINTO", "ERIKOIS"]
 
 CAT_COLOR = {
     "velvoite":   "#2471a3",
@@ -513,8 +514,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   deonttisen modaliteetin mukaan: <em>velvoite, lupa, kielto, suositus</em> tai
   <em>ei-deontti</em>. Raportti vertaa kahta luokittelumenetelmää:
   kielimalliperustaista (LLM) annotaatiota ja sääntöperustaista
-  (regex) luokitinta. Tarkoituksena on tuottaa skaalautuva ja paikallisesti
-  ajettava menetelmä lakitekstin velvoittavuusrakenteen analyysiin.</p>
+  (regex) luokitinta.</p>
 
   <p style="background:#fff8e1;padding:12px 16px;border-left:3px solid #d68910;border-radius:4px">
     <strong>Käyttöohje:</strong> Tulokset-välilehdellä voit selata kaikkia
@@ -554,9 +554,10 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   <div class="step">
     <div class="step-num">3</div>
     <div class="step-body">
-      <h4>Otoksen rajaus tiedonhallintakartan mukaan</h4>
-      <p>Analyysiin valittiin lait, jotka esiintyvät julkishallinnon
-      tiedonhallintakartassa. Lait ryhmiteltiin organisaatiotyypeittäin:</p>
+      <h4>Otoksen ensimmäinen vaihe — tiedonhallintakartta</h4>
+      <p>Otokseen valittiin ensimmäisessä vaiheessa lait, jotka esiintyvät
+      julkishallinnon tiedonhallintakartassa. Lait ryhmiteltiin
+      organisaatiotyypeittäin:</p>
       <ul>
         <li><span class="pill" style="background:#c0392b">Hyvinvointialue</span>
             <strong>{org_stats['HYVINVOINTIALUE']['total']:,} pykälää</strong> (kaikki mukaan)</li>
@@ -564,6 +565,41 @@ td {{ padding: 7px 12px; vertical-align: top; }}
             <strong>{org_stats['KUNTA']['total']:,} pykälää</strong> (satunnaisotos)</li>
         <li><span class="pill" style="background:#1e8449">Valtio</span>
             <strong>{org_stats['VALTIO']['total']:,} pykälää</strong> (satunnaisotos)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h4>Otoksen laajennus — erityislait</h4>
+      <p>Tiedonhallintakartan piirissä olevat lait painottuvat hallinto-
+      ja viranomaislainsäädäntöön. Kattavuuden parantamiseksi otosta
+      laajennettiin keskeisillä erityislailla, joihin tunnetusti sisältyy
+      runsaasti kieltoja, rangaistussäännöksiä ja muista oikeudenaloilta
+      poikkeavia rakenteita:</p>
+      <ul>
+        <li><span class="pill" style="background:#7f8c8d">Rikos</span>
+            <strong>{org_stats['RIKOS']['total']:,} pykälää</strong>
+            (Rikoslaki, Pakkokeinolaki, Vankeuslaki, Ampuma-aselaki, ...)</li>
+        <li><span class="pill" style="background:#7f8c8d">Vero</span>
+            <strong>{org_stats['VERO']['total']:,} pykälää</strong>
+            (Tuloverolaki, Arvonlisäverolaki, Verotusmenettelylaki, ...)</li>
+        <li><span class="pill" style="background:#7f8c8d">Yksityis</span>
+            <strong>{org_stats['YKSITYIS']['total']:,} pykälää</strong>
+            (Avioliittolaki, Perintökaari, Maakaari, Kuluttajansuojalaki, ...)</li>
+        <li><span class="pill" style="background:#7f8c8d">Yritys</span>
+            <strong>{org_stats['YRITYS']['total']:,} pykälää</strong>
+            (Osakeyhtiölaki, Asunto-osakeyhtiölaki, Konkurssilaki, ...)</li>
+        <li><span class="pill" style="background:#7f8c8d">Työ</span>
+            <strong>{org_stats['TYO']['total']:,} pykälää</strong>
+            (Työsopimuslaki, Työturvallisuuslaki, Työtapaturmalaki)</li>
+        <li><span class="pill" style="background:#7f8c8d">Hallinto</span>
+            <strong>{org_stats['HALLINTO']['total']:,} pykälää</strong>
+            (Hallintolaki, Oikeudenkäymiskaari, Kansalaisuuslaki, ...)</li>
+        <li><span class="pill" style="background:#7f8c8d">Erikois</span>
+            <strong>{org_stats['ERIKOIS']['total']:,} pykälää</strong>
+            (Tekijänoikeuslaki, Patenttilaki, Ajokorttilaki, ...)</li>
       </ul>
       <p>Otos yhteensä: <strong>{all_stats['total']:,} pykälää</strong>
       ({n_laws} eri laista).</p>
@@ -574,7 +610,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   <h3>2. Luokittelu</h3>
 
   <div class="step">
-    <div class="step-num">4</div>
+    <div class="step-num">5</div>
     <div class="step-body">
       <h4>Kielimallipohjainen annotaatio (referenssi)</h4>
       <p>Jokainen pykälä luokiteltiin kielimallilla. Malli sai pykälän tekstin
@@ -593,7 +629,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   </div>
 
   <div class="step">
-    <div class="step-num">5</div>
+    <div class="step-num">6</div>
     <div class="step-body">
       <h4>Sääntöpohjainen regex-luokitin</h4>
       <p>Kielimalliannotaatioiden perusteella tunnistettiin suomen
@@ -626,7 +662,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   </div>
 
   <div class="step">
-    <div class="step-num">6</div>
+    <div class="step-num">7</div>
     <div class="step-body">
       <h4>Validointi ja iteratiivinen kehitys</h4>
       <p>Regex-luokittimen tarkkuutta arvioidaan vertaamalla sen tuotosta
@@ -644,22 +680,44 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   <hr class="divider">
   <h3>3. Tulosten tulkinta</h3>
 
-  <p>Confusion matrix taulukon yläosassa näyttää, miten luokat sekoittuvat
-  toisiinsa. Diagonaalin solut kertovat oikein luokitellut tapaukset; muut
-  solut paljastavat tyypilliset virhetyypit (esim. luokkien <em>lupa</em> ja
-  <em>velvoite</em> rajatapaukset, joissa pykälä sisältää sekä mahdollistavan
-  että velvoittavan rakenteen).</p>
+  <p style="background:#fff3cd;padding:10px 14px;border-left:3px solid #d68910;border-radius:4px">
+    <strong>Tärkeä huomio:</strong> Kumpaakaan menetelmää ei pidetä
+    absoluuttisena totuutena. Tunnusluvut kuvaavat
+    <em>menetelmien välistä yhtäpitävyyttä</em>, eivät kummankaan
+    yksittäistä oikeellisuutta. Tämän työn aikana on havaittu tapauksia,
+    joissa kielimalli on luokitellut esim. rikoslain rangaistussäännöksen
+    velvoitteeksi (koska teksti sisältää passiivin nesessitiivimuodon
+    <em>"on tuomittava sakkoon"</em>), kun taas sääntöperustainen luokitin
+    on tunnistanut sen oikein kielloksi. Eroavat tapaukset kannattaa
+    siksi tarkastella tapauskohtaisesti — ne paljastavat sekä regex-
+    säännöstön rajoituksia että kielimallin omia tulkintavirheitä.
+  </p>
 
-  <p>Per-luokka-tilastoissa esitetään:</p>
+  <p>Confusion matrix taulukon yläosassa näyttää, miten kahden menetelmän
+  luokitukset jakautuvat. Diagonaalin solut kertovat tapaukset, joissa
+  menetelmät päätyvät samaan luokkaan; muut solut paljastavat tyypilliset
+  eroavaisuudet (esim. luokkien <em>lupa</em> ja <em>velvoite</em>
+  rajatapaukset, joissa pykälä sisältää sekä mahdollistavan että
+  velvoittavan rakenteen).</p>
+
+  <p>Per-luokka-tilastoissa esitetään yhtäpitävyysmittarit, joissa
+  kielimallin annotaatiota käytetään vertailupisteenä:</p>
   <ul>
-    <li><strong>Precision</strong> — kuinka usein regex on oikeassa, kun se
-        antaa kyseisen luokan</li>
-    <li><strong>Recall</strong> — kuinka iso osa kyseisen luokan
-        tapauksista regex tunnistaa</li>
-    <li><strong>F1</strong> — Precisionin ja Recallin harmoninen keskiarvo</li>
-    <li><strong>TP/FN/FP</strong> — oikeat osumat / vääriksi negatiiviksi
-        jääneet / vääriksi positiivisiksi luokitellut</li>
+    <li><strong>Precision</strong> — kun regex luokittelee tekstin luokkaan X,
+        kuinka usein myös kielimalli päätyy samaan luokkaan</li>
+    <li><strong>Recall</strong> — kun kielimalli luokittelee tekstin luokkaan X,
+        kuinka usein myös regex päätyy samaan luokkaan</li>
+    <li><strong>F1</strong> — Precisionin ja Recallin harmoninen keskiarvo;
+        antaa yhden tunnusluvun molempien yhdenmukaisuudesta</li>
+    <li><strong>TP / FN / FP</strong> — yhteneväiset luokitukset (TP),
+        kielimallin luokitukset jotka regex tulkitsi toisin (FN),
+        ja regexin luokitukset jotka kielimalli tulkitsi toisin (FP)</li>
   </ul>
+
+  <p>Korkea F1 yhdessä luokassa tarkoittaa vahvaa yhdenmukaisuutta
+  menetelmien välillä — se ei vielä todista kummankaan olevan
+  absoluuttisesti oikeassa, mutta antaa luottamusta siihen, että
+  kyseinen luokka on hyvin tunnistettavissa molemmilla tavoilla.</p>
 
   <hr class="divider">
   <h3>4. Menetelmän rajat</h3>
