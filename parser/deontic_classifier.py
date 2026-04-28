@@ -19,10 +19,23 @@ import polars as pl
 
 RULES: list[tuple[str, list[str]]] = [
 
+    # TIER 0 — rikoslakikielto: pykälä alkaa "Joka X, on tuomittava ..."
+    # Vaaditaan että teksti ALKAA sanalla "Joka" (kieltoehto kohdistuu
+    # kuvattuun toimintaan). Tällä rajauksella säännöksen rakenne erottuu
+    # esim. "joka jälkeen"/"joka tapauksessa" -lauseista, jotka eivät ole
+    # rikoslakirakenteita.
+    ("kielto", [
+        # Teksti alkaa "Joka" ja sisältää tuomit + sakko/vankeut → rikoslakikielto
+        r"^joka\b[\s\S]{0,500}\btuomit(?:taan|tava|tavaa)\b[\s\S]{0,200}\b(?:sakko\w*|vankeut\w*)\b",
+        r"^joka\b[\s\S]{0,300}\brangaist(?:aan|a|us\w*)\b",
+        # "rangaistaan sakolla/vankeudella" — passiivinen rangaistuskielto
+        r"\brangaistaan\s+\w+(?:lla|llä)\b",
+    ]),
+
     # TIER 1A — vahvat passiiviset velvoitesignaalit
-    # Nostettu ei_deontin yli: jos pykälässä on "on Xtava/tävä", se on velvoite
-    # vaikka kappale alkaisi määrittelyllä ("tässä laissa tarkoitettujen X on toteutettava Y").
-    # Yhdistetty -ttava ja -tava: kattaa myös "julkaistava", "saatava", "annettava".
+    # Jos pykälässä on "on Xtava/tävä", se on velvoite vaikka kappale alkaisi
+    # määrittelyllä. Yhdistetty -ttava ja -tava: kattaa myös "julkaistava",
+    # "saatava", "annettava".
     ("velvoite", [
         r"\bon\b(?:\s+\S+){0,6}\s+\w+t(?:ava|ävä)\b",
         r"\bon\s+oltava\b",
@@ -110,9 +123,9 @@ RULES: list[tuple[str, list[str]]] = [
     ]),
 
     # TIER 4 — aktiiviset 3. persoonan velvoiteverbit (matalin prioriteetti)
-    # Lisatty tyypilliset toimivaltaverbit: tekee, antaa, jarjestaa, toteuttaa,
-    # laatii, maksaa. Naiden FP-riski on hallittu, koska tama tier fire-aa vain
-    # jos mikaan ylempi sannot ei matchaa.
+    # Vain verbeja jotka tyypillisesti kuvaavat organisaation toimivaltaa
+    # tai velvoittavaa toimintaa. Jätetty pois liian geneeriset (edistää, antaa,
+    # turvaa) jotka esiintyvät usein myös puhtaasti kuvailevassa kontekstissa.
     ("velvoite", [
         r"\bvastaa\b",
         r"\bvastaavat\b",
@@ -133,11 +146,8 @@ RULES: list[tuple[str, list[str]]] = [
         r"\btoteuttaa\b",
         r"\blaatii\b",
         r"\bnoudattaa\b",
-        r"\bedistää\b",
-        r"\bturvaa\b",
         r"\bvarmistaa\b",
         r"\bsuorittaa\b",
-        r"\bantaa\b",
         r"\bmaksaa\b",
         r"\bilmoittaa\b",
         r"\bkäsittelee\b",

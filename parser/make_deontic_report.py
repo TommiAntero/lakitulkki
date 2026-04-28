@@ -598,13 +598,18 @@ td {{ padding: 7px 12px; vertical-align: top; }}
       <h4>Sääntöpohjainen regex-luokitin</h4>
       <p>Kielimalliannotaatioiden perusteella tunnistettiin suomen
       lakikielelle tyypilliset deonttista modaliteettia ilmaisevat
-      rakenteet. Näistä koostettiin neljätasoinen prioriteettijärjestelmä,
+      rakenteet. Näistä koostettiin viisitasoinen prioriteettijärjestelmä,
       jossa vahvimmat ja yksiselitteisimmät signaalit tunnistetaan ensin:</p>
       <ul>
+        <li><strong>Taso 0 — rikoslakirakenteet:</strong>
+            "Joka X, on tuomittava sakkoon/vankeuteen" -tyyppiset
+            rangaistussäännökset luokitellaan kielloiksi (X on kielletty
+            toiminta), vaikka rakenne sisältäisi velvoiteilmauksen
+            tuomioistuimelle.</li>
         <li><strong>Taso 1 — vahvat passiivirakenteet:</strong>
             nesessitiivimuoto (<em>on tehtävä, on huolehdittava, on otettava</em>),
-            sekä eksplisiittiset velvoite- ja kieltoilmaukset
-            (<em>velvoitetaan, ei saa, kielletään</em>).</li>
+            eksplisiittiset velvoiteilmaukset (<em>velvoitetaan, on velvollinen</em>),
+            ja eksplisiittiset kieltoilmaukset (<em>ei saa, kielletään, on kielletty</em>).</li>
         <li><strong>Taso 2 — ei-deonttiset ankkurit:</strong>
             voimaantulo, määritelmät ja soveltamisrajaukset
             (<em>tulee voimaan, tarkoitetaan, ei sovelleta</em>).</li>
