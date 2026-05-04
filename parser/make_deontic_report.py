@@ -282,6 +282,81 @@ top_prop_laws = [l for l, _ in prop_laws.most_common(100)]
 
 print(f"  Propositio-näkymä: {len(prop_pages_list):,} pykälää")
 
+# ── Vertailunäkymä: LLM-propositiot vs. regex-ekstraktorin tuotos ─────────────
+# Käytetään LLM-sample-pykäliä (22 927) yhteisenä alustana. Lisätään regex-
+# ekstraktorin tulokset rinnalle kun ne ovat saman pykälän osumat. Pidämme
+# JSON-koon hallinnassa rajaamalla otoksen LLM-pykäliin.
+
+REGEX_PROPS_CSV = ROOT / "data" / "regex_propositions.csv"
+print("Rakennetaan LLM-vs-regex -vertailunäkymää...")
+
+# law_id+eId+num -> {llm_props, regex_props, law, num, text, org}
+compare_pages: dict[tuple, dict] = {}
+
+# Aloita LLM-puolesta (kopioi prop_pages)
+for key, p in prop_pages.items():
+    compare_pages[key] = {
+        "law":  p["law"],
+        "num":  p["num"],
+        "text": p["text"],
+        "org":  p["org"],
+        "llm":  p["props"],
+        "rx":   [],
+    }
+
+# Lisätään lisäksi pykälät joilla LLM ei löytänyt mitään mutta jotka olivat
+# LLM-otoksessa - tarvitsemme nämä myös vertailuun
+sample_keys: set[tuple] = set()
+for r in rows:
+    pass  # rows-lista ei sisällä law_id-tunnistetta — pitää lukea uudestaan
+
+with open(IN_CSV, encoding="utf-8", newline="") as f:
+    for r in csv.DictReader(f):
+        if r.get("modaliteetti","").strip().lower() in {"virhe","ehto","viittauslause"}:
+            continue
+        text = r.get("text","").strip()
+        if not text:
+            continue
+        key = (r["law_id"], r["eId"], r["num"])
+        sample_keys.add(key)
+        if key not in compare_pages:
+            compare_pages[key] = {
+                "law":  (r["law_title"] or "")[:80],
+                "num":  r["num"] or r["eId"],
+                "text": text[:500],
+                "org":  r["org_tyyppi"],
+                "llm":  [],
+                "rx":   [],
+            }
+
+# Lisätään regex-propositiot (vain LLM-otoksen pykälille)
+n_rx_total = 0
+n_rx_kept  = 0
+if REGEX_PROPS_CSV.exists():
+    with open(REGEX_PROPS_CSV, encoding="utf-8", newline="") as f:
+        for r in csv.DictReader(f):
+            n_rx_total += 1
+            key = (r["law_id"], r["eId"], r["num"])
+            if key not in sample_keys:
+                continue  # rajaa LLM-otokseen
+            if key not in compare_pages:
+                continue
+            compare_pages[key]["rx"].append({
+                "m": r["modaliteetti"],
+                "s": (r["toimija"] or "")[:60],
+                "k": (r["kohde"] or "")[:160],
+            })
+            n_rx_kept += 1
+
+# Suodata pois pykälät joissa molemmat tyhjät (ei vertailtavaa)
+compare_list = [v for v in compare_pages.values() if v["llm"] or v["rx"]]
+# Järjestys: ensin pykälät joilla on suuri ero (LLM:n ja regexin proppojen ero)
+def disagreement_score(p):
+    return abs(len(p["llm"]) - len(p["rx"]))
+compare_list.sort(key=lambda p: -disagreement_score(p))
+print(f"  Vertailupykäliä: {len(compare_list):,}")
+print(f"  Regex-propositiot otoksessa: {n_rx_kept:,} / {n_rx_total:,} kaikkiaan")
+
 # ── Tilastot ──────────────────────────────────────────────────────────────────
 
 def stats(data):
@@ -325,8 +400,9 @@ toimijat_json = json.dumps(toimijat, ensure_ascii=False, separators=(",", ":"))
 prop_pages_json = json.dumps(prop_pages_list, ensure_ascii=False, separators=(",", ":"))
 prop_toimijat_json = json.dumps(top_prop_toimijat, ensure_ascii=False, separators=(",", ":"))
 prop_laws_json = json.dumps(top_prop_laws, ensure_ascii=False, separators=(",", ":"))
+compare_json = json.dumps(compare_list, ensure_ascii=False, separators=(",", ":"))
 
-print(f"  JSON: rows={len(data_json)//1024:,} KB, propositiot={len(prop_pages_json)//1024:,} KB")
+print(f"  JSON: rows={len(data_json)//1024:,} KB, propositiot={len(prop_pages_json)//1024:,} KB, vertailu={len(compare_json)//1024:,} KB")
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -622,6 +698,45 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   font-size: 10px; padding: 1px 6px; border-radius: 8px;
   background: #e8f4f8; color: #2980b9; font-weight: 600;
 }}
+
+/* ── Vertailu-välilehti (LLM vs regex) ── */
+#cmp-filters {{
+  padding: 8px 16px; background: #fff; border-bottom: 1px solid #dfe6e9;
+  display: flex; gap: 12px; align-items: center; flex-shrink: 0;
+}}
+#cmp-list-wrap {{ flex: 1; overflow-y: auto; padding: 14px 16px; background: #f0f2f5; }}
+.cmp-pyk {{
+  background: #fff; border: 1px solid #dfe6e9; border-radius: 5px;
+  margin-bottom: 12px; overflow: hidden;
+}}
+.cmp-pyk-head {{
+  padding: 8px 14px; background: #f8f9fa; border-bottom: 1px solid #dfe6e9;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}}
+.cmp-pyk-text {{
+  padding: 8px 14px; color: #4a4a4a; font-size: 12px; line-height: 1.5;
+  background: #fafbfc; border-bottom: 1px dashed #dfe6e9;
+}}
+.cmp-grid {{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+}}
+.cmp-col {{
+  padding: 8px 14px; min-height: 60px;
+}}
+.cmp-col-llm {{ border-right: 1px solid #f0f0f0; background: #fafbfc; }}
+.cmp-col-rx  {{ background: #fff; }}
+.cmp-col-head {{
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; margin-bottom: 6px; color: #636e72;
+}}
+.cmp-prop {{
+  padding: 4px 0; border-bottom: 1px dotted #f0f0f0;
+  font-size: 12px; line-height: 1.4;
+}}
+.cmp-prop:last-child {{ border-bottom: none; }}
+.cmp-prop .toim {{ font-weight: 500; color: #2d3436; }}
+.cmp-prop .kohd {{ color: #4a4a4a; }}
+.cmp-empty {{ font-style: italic; color: #b2bec3; font-size: 11px; }}
 </style>
 </head>
 <body>
@@ -636,6 +751,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   <div class="tab active" onclick="switchTab('report')">Tulokset</div>
   <div class="tab" onclick="switchTab('toimijat')">Toimijat &amp; tehtävät</div>
   <div class="tab" onclick="switchTab('propositiot')">Propositiot</div>
+  <div class="tab" onclick="switchTab('vertailu')">LLM vs. regex</div>
   <div class="tab" onclick="switchTab('info')">&#9432; Tietoa analyysista</div>
 </div>
 
@@ -793,6 +909,29 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 </div>
 
 </div><!-- /tab-propositiot -->
+
+<!-- ── LLM vs. REGEX -VÄLILEHTI ── -->
+<div id="tab-vertailu" class="tab-content">
+
+<div id="cmp-filters">
+  <strong style="font-size:13px">Pykäläkohtainen vertailu</strong>
+  <span class="light" id="cmp-summary"></span>
+  <label style="margin-left:auto">Näytä:</label>
+  <select id="cmp-filter" onchange="renderCompare()">
+    <option value="all">Kaikki pykälät</option>
+    <option value="diff">Vain pykälät joissa eroa</option>
+    <option value="match">Vain yhtäpitävät pykälät</option>
+    <option value="onlyllm">Vain LLM tunnisti propositioita</option>
+    <option value="onlyrx">Vain regex tunnisti propositioita</option>
+  </select>
+  <input type="text" id="cmp-text" placeholder="Hae tekstistä tai lain nimestä..." oninput="renderCompare()" style="min-width:240px">
+</div>
+
+<div id="cmp-list-wrap">
+  <div id="cmp-list"></div>
+</div>
+
+</div><!-- /tab-vertailu -->
 
 <!-- ── INFO-VÄLILEHTI ── -->
 <div id="tab-info" class="tab-content">
@@ -1095,6 +1234,7 @@ const ROWS = {data_json};
 const STATS = {stats_json};
 const TOIMIJAT = {toimijat_json};
 const PROP_PAGES = {prop_pages_json};
+const CMP_PAGES = {compare_json};
 const COLORS = STATS.colors;
 
 // ── Confusion matrix ──────────────────────────────────────────────────────────
@@ -1371,6 +1511,106 @@ function renderProps() {{
 }}
 
 renderProps();
+
+// ── LLM vs. regex -vertailu ──────────────────────────────────────────────────
+
+function modSet(props) {{
+  const s = new Set();
+  props.forEach(p => s.add(p.m));
+  return s;
+}}
+function setEq(a, b) {{
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}}
+
+function renderCompare() {{
+  const filterMode = document.getElementById('cmp-filter').value;
+  const textF = document.getElementById('cmp-text').value.toLowerCase();
+
+  let filtered = [];
+  let stats = {{ same: 0, diff: 0, onlyllm: 0, onlyrx: 0, both_empty: 0 }};
+
+  for (const p of CMP_PAGES) {{
+    const llmSet = modSet(p.llm);
+    const rxSet  = modSet(p.rx);
+
+    let category = 'same';
+    if (p.llm.length === 0 && p.rx.length === 0) category = 'both_empty';
+    else if (p.llm.length > 0 && p.rx.length === 0) category = 'onlyllm';
+    else if (p.llm.length === 0 && p.rx.length > 0) category = 'onlyrx';
+    else if (!setEq(llmSet, rxSet)) category = 'diff';
+    stats[category]++;
+
+    // tekstihaku
+    const blob = (p.law + ' ' + p.num + ' ' + p.text).toLowerCase();
+    if (textF && !blob.includes(textF)) continue;
+
+    if (filterMode === 'all') filtered.push({{...p, category}});
+    else if (filterMode === 'diff' && (category === 'diff' || category === 'onlyllm' || category === 'onlyrx'))
+      filtered.push({{...p, category}});
+    else if (filterMode === 'match' && category === 'same' && p.llm.length > 0)
+      filtered.push({{...p, category}});
+    else if (filterMode === 'onlyllm' && category === 'onlyllm') filtered.push({{...p, category}});
+    else if (filterMode === 'onlyrx' && category === 'onlyrx') filtered.push({{...p, category}});
+  }}
+
+  document.getElementById('cmp-summary').textContent =
+    `${{filtered.length.toLocaleString('fi')}} pykälää näkyvissä` +
+    ` · ero LLM⇄regex: ${{stats.diff.toLocaleString('fi')}}` +
+    ` · vain LLM: ${{stats.onlyllm.toLocaleString('fi')}}` +
+    ` · vain regex: ${{stats.onlyrx.toLocaleString('fi')}}` +
+    ` · yhtäpitävä: ${{stats.same.toLocaleString('fi')}}`;
+
+  const PAGE = 200;
+  let html = '';
+
+  function renderProps(props, isLlm) {{
+    if (!props.length) return '<div class="cmp-empty">— ei propositioita —</div>';
+    return props.map(q => {{
+      const badge = `<span class="badge" style="background:${{COLORS[q.m]}}">${{q.m}}</span>`;
+      const toim = q.s ? `<span class="toim">${{q.s}}</span>` : '<span class="cmp-empty">(toimija ei tunnistettu)</span>';
+      const kohd = q.k ? `<span class="kohd"> · ${{q.k}}</span>` : '';
+      const perust = isLlm && q.p ? `<div style="color:#b2bec3;font-style:italic;font-size:11px;margin-top:2px">"${{q.p}}"</div>` : '';
+      return `<div class="cmp-prop">${{badge}} ${{toim}}${{kohd}}${{perust}}</div>`;
+    }}).join('');
+  }}
+
+  filtered.slice(0, PAGE).forEach(p => {{
+    html += `<div class="cmp-pyk">
+      <div class="cmp-pyk-head">
+        <span style="font-weight:600">${{p.law}}</span>
+        <span class="light">· ${{p.num}}</span>
+        <span class="org-badge">${{p.org}}</span>
+        <span class="light" style="margin-left:auto">
+          LLM: ${{p.llm.length}} · regex: ${{p.rx.length}}
+        </span>
+      </div>
+      <div class="cmp-pyk-text">${{p.text}}</div>
+      <div class="cmp-grid">
+        <div class="cmp-col cmp-col-llm">
+          <div class="cmp-col-head" style="color:#2980b9">LLM (${{p.llm.length}})</div>
+          ${{renderProps(p.llm, true)}}
+        </div>
+        <div class="cmp-col cmp-col-rx">
+          <div class="cmp-col-head" style="color:#27ae60">Regex (${{p.rx.length}})</div>
+          ${{renderProps(p.rx, false)}}
+        </div>
+      </div>
+    </div>`;
+  }});
+
+  if (filtered.length > PAGE) {{
+    html += `<p style="text-align:center;color:#999;padding:14px">
+      ... ${{filtered.length - PAGE}} pykälää piilotettu — tarkenna suodattimia tai hakua
+    </p>`;
+  }}
+  document.getElementById('cmp-list').innerHTML = html
+    || '<p style="text-align:center;color:#999;padding:40px">Ei osumia.</p>';
+}}
+
+renderCompare();
 
 // ── Välilehtien vaihto ────────────────────────────────────────────────────────
 function switchTab(name) {{
