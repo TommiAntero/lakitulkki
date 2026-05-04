@@ -233,6 +233,55 @@ with open(TOIMIJA_CSV, "w", encoding="utf-8", newline="") as f:
                     r["num"], r["perust"], r["text"]])
 print(f"  CSV: {TOIMIJA_CSV.name}")
 
+# ── Propositio-näkymä Propositiot-välilehdelle ────────────────────────────────
+# Ryhmitellään 65 201 propositiota pykälää kohti: yksi rivi per pykälä jossa
+# kaikki sen propositiot listana. Tämä pitää JSON-koon hallittuna ja antaa
+# pykälä-keskeisen näkymän.
+
+print("Rakennetaan propositio-näkymä...")
+
+# law_id+eId+num -> {law, num, text, org, props: [...]}
+prop_pages: dict[tuple, dict] = {}
+
+if PROPS_CSV.exists():
+    with open(PROPS_CSV, encoding="utf-8", newline="") as f:
+        for r in csv.DictReader(f):
+            key = (r["law_id"], r["eId"], r["num"])
+            if key not in prop_pages:
+                prop_pages[key] = {
+                    "law":  (r["law_title"] or "")[:80],
+                    "num":  r["num"] or r["eId"],
+                    "text": (r.get("text") or "")[:500],
+                    "org":  r["org_tyyppi"],
+                    "props": [],
+                }
+            prop_pages[key]["props"].append({
+                "m": r["modaliteetti"],
+                "s": (r["toimija"] or "")[:60],
+                "k": (r["kohde"] or "")[:160],
+                "t": r["type"][:1],     # 'e' / 'i' kompaktia varten
+                "p": (r["perustelu"] or "")[:200],
+            })
+
+# Lista JS-näkymälle: pykälä-objektit, propositiot ovat alla
+prop_pages_list = list(prop_pages.values())
+prop_pages_list.sort(key=lambda x: (-len(x["props"]), x["law"], x["num"]))
+
+# Toimijoiden lista propositioista (filteriä varten)
+prop_toimijat = Counter()
+for p in prop_pages.values():
+    for q in p["props"]:
+        if q["s"]:
+            prop_toimijat[q["s"].lower()] += 1
+# Top 200 toimijaa filterivalintaan
+top_prop_toimijat = [t for t, _ in prop_toimijat.most_common(200)]
+
+# Top 100 lakia filteriä varten
+prop_laws = Counter(p["law"] for p in prop_pages.values())
+top_prop_laws = [l for l, _ in prop_laws.most_common(100)]
+
+print(f"  Propositio-näkymä: {len(prop_pages_list):,} pykälää")
+
 # ── Tilastot ──────────────────────────────────────────────────────────────────
 
 def stats(data):
@@ -273,8 +322,11 @@ stats_json = json.dumps({
     "colors": CAT_COLOR,
 }, ensure_ascii=False, separators=(",", ":"))
 toimijat_json = json.dumps(toimijat, ensure_ascii=False, separators=(",", ":"))
+prop_pages_json = json.dumps(prop_pages_list, ensure_ascii=False, separators=(",", ":"))
+prop_toimijat_json = json.dumps(top_prop_toimijat, ensure_ascii=False, separators=(",", ":"))
+prop_laws_json = json.dumps(top_prop_laws, ensure_ascii=False, separators=(",", ":"))
 
-print(f"  JSON: {len(data_json)//1024:,} KB")
+print(f"  JSON: rows={len(data_json)//1024:,} KB, propositiot={len(prop_pages_json)//1024:,} KB")
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -527,6 +579,49 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   padding: 8px 16px; background: #fff; border-bottom: 1px solid #dfe6e9;
   display: flex; gap: 12px; align-items: center; flex-shrink: 0;
 }}
+
+/* ── Propositiot-välilehti ── */
+#prop-filters {{
+  padding: 8px 16px; background: #fff; border-bottom: 1px solid #dfe6e9;
+  display: flex; gap: 12px; align-items: center; flex-shrink: 0;
+}}
+#prop-filters2 {{
+  padding: 8px 16px; background: #fff; border-bottom: 1px solid #dfe6e9;
+  display: flex; gap: 12px; align-items: center; flex-shrink: 0;
+}}
+#prop-list-wrap {{ flex: 1; overflow-y: auto; padding: 14px 16px; background: #f0f2f5; }}
+.prop-pyk {{
+  background: #fff; border: 1px solid #dfe6e9; border-radius: 5px;
+  margin-bottom: 10px; overflow: hidden;
+}}
+.prop-pyk-head {{
+  padding: 8px 14px; background: #f8f9fa; border-bottom: 1px solid #dfe6e9;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}}
+.prop-pyk-head .law-name {{ font-weight: 600; color: #2d3436; }}
+.prop-pyk-head .num {{ color: #636e72; font-size: 11px; }}
+.prop-pyk-text {{
+  padding: 8px 14px; color: #4a4a4a; font-size: 12px; line-height: 1.5;
+  background: #fafbfc; border-bottom: 1px dashed #dfe6e9;
+}}
+.prop-row {{
+  display: grid;
+  grid-template-columns: 100px 200px 1fr auto;
+  gap: 12px; padding: 8px 14px;
+  border-bottom: 1px solid #f0f0f0; align-items: start;
+}}
+.prop-row:last-child {{ border-bottom: none; }}
+.prop-row .toimija {{ font-weight: 500; color: #2d3436; font-size: 12px; }}
+.prop-row .kohde {{ color: #2d3436; font-size: 12px; line-height: 1.5; }}
+.prop-row .perust {{ color: #b2bec3; font-size: 11px; font-style: italic; margin-top: 3px; }}
+.prop-row .type-impl {{
+  font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  background: #fff3cd; color: #d68910; font-weight: 600;
+}}
+.prop-row .type-expl {{
+  font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  background: #e8f4f8; color: #2980b9; font-weight: 600;
+}}
 </style>
 </head>
 <body>
@@ -540,6 +635,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 <div id="tabs">
   <div class="tab active" onclick="switchTab('report')">Tulokset</div>
   <div class="tab" onclick="switchTab('toimijat')">Toimijat &amp; tehtävät</div>
+  <div class="tab" onclick="switchTab('propositiot')">Propositiot</div>
   <div class="tab" onclick="switchTab('info')">&#9432; Tietoa analyysista</div>
 </div>
 
@@ -650,6 +746,53 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 </div>
 
 </div><!-- /tab-toimijat -->
+
+<!-- ── PROPOSITIOT-VÄLILEHTI ── -->
+<div id="tab-propositiot" class="tab-content">
+
+<div id="prop-filters">
+  <strong style="font-size:13px">Propositiot</strong>
+  <span class="light" id="prop-summary"></span>
+  <label style="margin-left:auto">Modaliteetti:</label>
+  <select id="p-mod" onchange="renderProps()">
+    <option value="">Kaikki</option>
+    <option value="velvoite">velvoite</option>
+    <option value="lupa">lupa</option>
+    <option value="kielto">kielto</option>
+    <option value="suositus">suositus</option>
+  </select>
+  <label>Type:</label>
+  <select id="p-type" onchange="renderProps()">
+    <option value="">Kaikki</option>
+    <option value="e">eksplisiittinen</option>
+    <option value="i">implisiittinen</option>
+  </select>
+  <label>Org-tyyppi:</label>
+  <select id="p-org" onchange="renderProps()">
+    <option value="">Kaikki</option>
+    <option>HYVINVOINTIALUE</option>
+    <option>KUNTA</option>
+    <option>VALTIO</option>
+    <option>RIKOS</option>
+    <option>VERO</option>
+    <option>YKSITYIS</option>
+    <option>YRITYS</option>
+    <option>TYO</option>
+    <option>HALLINTO</option>
+    <option>ERIKOIS</option>
+  </select>
+</div>
+
+<div id="prop-filters2">
+  <input type="text" id="p-toimija" placeholder="Toimija (esim. tekijä, kunta, hyvinvointialue)..." oninput="renderProps()" style="min-width:260px">
+  <input type="text" id="p-text" placeholder="Hae tekstistä, kohteesta tai lain nimestä..." oninput="renderProps()" style="flex:1;min-width:260px">
+</div>
+
+<div id="prop-list-wrap">
+  <div id="prop-list"></div>
+</div>
+
+</div><!-- /tab-propositiot -->
 
 <!-- ── INFO-VÄLILEHTI ── -->
 <div id="tab-info" class="tab-content">
@@ -951,6 +1094,7 @@ td {{ padding: 7px 12px; vertical-align: top; }}
 const ROWS = {data_json};
 const STATS = {stats_json};
 const TOIMIJAT = {toimijat_json};
+const PROP_PAGES = {prop_pages_json};
 const COLORS = STATS.colors;
 
 // ── Confusion matrix ──────────────────────────────────────────────────────────
@@ -1145,6 +1289,88 @@ function renderToimijaDetail(t) {{
 }}
 
 renderToimijat();
+
+// ── Propositiot-välilehti ────────────────────────────────────────────────────
+
+function renderProps() {{
+  const modF = document.getElementById('p-mod').value;
+  const typeF = document.getElementById('p-type').value;
+  const orgF = document.getElementById('p-org').value;
+  const toimijaF = document.getElementById('p-toimija').value.toLowerCase();
+  const textF = document.getElementById('p-text').value.toLowerCase();
+
+  // Suodatetaan: pidetään pykälä mukana jos sillä on >=1 propositio joka
+  // täyttää modaliteetti+type-suodattimet, JA pykälä itse vastaa muita
+  // suodattimia
+  let filtered = [];
+  let totalProps = 0;
+  let shownProps = 0;
+  for (const p of PROP_PAGES) {{
+    if (orgF && p.org !== orgF) continue;
+
+    // tekstihaku osuu lain nimeen, pykälätekstiin tai kohde-kenttiin
+    const blob = (p.law + ' ' + p.num + ' ' + p.text + ' '
+                  + p.props.map(q => q.k).join(' ')).toLowerCase();
+    if (textF && !blob.includes(textF)) continue;
+
+    // Suodata propositiot pykälän sisällä
+    let kept = p.props.filter(q => {{
+      if (modF && q.m !== modF) return false;
+      if (typeF && q.t !== typeF) return false;
+      if (toimijaF && !q.s.toLowerCase().includes(toimijaF)) return false;
+      return true;
+    }});
+    totalProps += p.props.length;
+    if (kept.length === 0) continue;
+    shownProps += kept.length;
+    filtered.push({{...p, props: kept}});
+  }}
+
+  document.getElementById('prop-summary').textContent =
+    `${{filtered.length.toLocaleString('fi')}} pykälää, ${{shownProps.toLocaleString('fi')}} propositiota näkyvissä` +
+    ` / ${{PROP_PAGES.length.toLocaleString('fi')}} pykälää, ${{totalProps.toLocaleString('fi')}} propositiota yhteensä`;
+
+  // Renderoi enintään 200 pykälää (yli 200 piilotetaan, käyttäjä tarkentaa hakua)
+  const PAGE = 200;
+  let html = '';
+  filtered.slice(0, PAGE).forEach(p => {{
+    let propsHtml = '';
+    p.props.forEach(q => {{
+      const typeBadge = q.t === 'i'
+        ? '<span class="type-impl">implisiittinen</span>'
+        : '<span class="type-expl">eksplisiittinen</span>';
+      propsHtml += `<div class="prop-row">
+        <div><span class="badge" style="background:${{COLORS[q.m]}}">${{q.m}}</span></div>
+        <div class="toimija">${{q.s || '<span class="light">—</span>'}}</div>
+        <div>
+          <div class="kohde">${{q.k}}</div>
+          ${{q.p ? `<div class="perust">"${{q.p}}"</div>` : ''}}
+        </div>
+        <div>${{typeBadge}}</div>
+      </div>`;
+    }});
+
+    html += `<div class="prop-pyk">
+      <div class="prop-pyk-head">
+        <span class="law-name">${{p.law}}</span>
+        <span class="num">· ${{p.num}}</span>
+        <span class="org-badge">${{p.org}}</span>
+        <span class="light" style="margin-left:auto">${{p.props.length}} propositiota</span>
+      </div>
+      <div class="prop-pyk-text">${{p.text}}</div>
+      ${{propsHtml}}
+    </div>`;
+  }});
+  if (filtered.length > PAGE) {{
+    html += `<p style="text-align:center;color:#999;padding:14px">
+      ... ${{filtered.length - PAGE}} pykälää piilotettu — tarkenna suodattimia tai hakua
+    </p>`;
+  }}
+  document.getElementById('prop-list').innerHTML = html
+    || '<p style="text-align:center;color:#999;padding:40px">Ei osumia. Muokkaa suodattimia.</p>';
+}}
+
+renderProps();
 
 // ── Välilehtien vaihto ────────────────────────────────────────────────────────
 function switchTab(name) {{
