@@ -48,6 +48,12 @@ data/sections/
 # Poikkeus: jaetut HTML-raportit ja asiakkaan tarvitsemat CSV:t versiohallinnassa
 !data/*.html
 !data/toimija_velvoitteet.csv
+!data/deontic_propositions.csv
+!data/consolidated_sections_lite.csv
+
+# Resume-tilatiedostot: ei pitkäaikaista arvoa, generoidaan ajojen aikana
+data/deontic_propositions_done.txt
+data/deontic_propositions_done.txt.bak
 
 # Parserin syötteet (ZIP-arkistot, XML-tiedostot)
 parser/input/

@@ -23,9 +23,11 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from deontic_classifier import classify
+from deontic_classifier_multilabel import classify_multilabel
 
 ROOT     = Path(__file__).resolve().parents[1]
 IN_CSV   = ROOT / "data" / "deontic_thk_sample.csv"
+PROPS_CSV = ROOT / "data" / "deontic_propositions.csv"
 OUT_HTML = ROOT / "data" / "deontic_report.html"
 
 CATS = ["velvoite", "lupa", "kielto", "suositus", "ei_deontti"]
@@ -73,6 +75,113 @@ with open(IN_CSV, encoding="utf-8", newline="") as f:
 n_laws = len(law_ids - {""})
 print(f"  Rivejä: {len(rows):,}")
 print(f"  Lakeja: {n_laws}")
+
+# ── Multi-label vertailu propositio-aineistoon ───────────────────────────────
+# Lasketaan multi-label-luokittelijan precision/recall/F1 per luokka käyttäen
+# propositio-aineistoa "totuutena" (LLM:n tunnistamat propositiot kullekin
+# pykälälle). Tämä on rikkaampi näkemys kuin yksiluokkainen vertailu.
+from collections import defaultdict
+
+print("Lasketaan multi-label-vertailu propositio-aineistoon...")
+
+# Luetaan propositiot ja ryhmitellään pykälä → modaliteettijoukko
+pyk_props: dict[tuple, set[str]] = defaultdict(set)
+n_props = 0
+if PROPS_CSV.exists():
+    with open(PROPS_CSV, encoding="utf-8", newline="") as f:
+        for r in csv.DictReader(f):
+            pyk_props[(r["law_id"], r["eId"], r["num"])].add(r["modaliteetti"])
+            n_props += 1
+print(f"  Propositioita aineistossa: {n_props:,} pykälässä joilla on >=1 propositio: {len(pyk_props):,}")
+
+# Lasketaan multi-label-tulos jokaiselle pykälälle ja vertaillaan propositiosettiin
+ML_CLASSES = ["velvoite", "kielto", "lupa", "suositus"]
+ml_stats   = {c: {"tp": 0, "fp": 0, "fn": 0} for c in ML_CLASSES}
+ml_overlap = 0     # pykälää joilla regex ja propositiot jakavat >=1 luokan
+ml_exact   = 0     # pykälää joissa joukot ovat samat (ilman ei_deontti-tagia)
+ml_n       = 0
+
+# Tallennetaan myös rivikohtainen multi-label-tieto JS-näkymää varten
+for r in rows:
+    text = r.get("text") or ""
+    rx_set = classify_multilabel(text)
+    rx_signal = rx_set - {"ei_deontti"}
+    key = (
+        # rakenna avain alkuperäiselle CSV-riville (text-kenttä on lyhennetty)
+        r.get("law_id", ""),  # ei vielä rowissa — fix alla
+    )
+
+# Yllä oleva ei toimi, koska law_id ei ole rowissa. Käytän sen sijaan
+# alkuperäistä CSV-riviä: lasketaan multi-label uudestaan suoraan tiedostosta
+# ja poimitaan avain.
+
+# Build a map of (law_id, eId, num) → multi-label set by re-reading source
+print("  (Re-mapping multi-label tuloksiin)...")
+ml_for_row = {}  # rowi-indeksi -> set
+with open(IN_CSV, encoding="utf-8", newline="") as f:
+    src_reader = csv.DictReader(f)
+    src_rows = list(src_reader)
+
+# rows ja src_rows eivät välttämättä ole samassa järjestyksessä virhesuodatuksen
+# vuoksi, joten käytetään (law_id, eId, num) -avainta. rows-tietoihin pitää
+# lisätä law_id ja eId.
+
+ml_keys_to_set: dict[tuple, set[str]] = {}
+for sr in src_rows:
+    llm = sr.get("modaliteetti", "").strip().lower()
+    text = sr.get("text", "").strip()
+    if not llm or not text or llm in {"virhe", "ehto", "viittauslause"}:
+        continue
+    k = (sr.get("law_id",""), sr.get("eId",""), sr.get("num",""))
+    ml_keys_to_set[k] = classify_multilabel(text)
+
+# Lasketaan vertailut käyttäen src_rows-järjestystä (sama kuin "rows")
+for sr in src_rows:
+    llm = sr.get("modaliteetti", "").strip().lower()
+    text = sr.get("text", "").strip()
+    if not llm or not text or llm in {"virhe", "ehto", "viittauslause"}:
+        continue
+    k = (sr.get("law_id",""), sr.get("eId",""), sr.get("num",""))
+    rx_set = ml_keys_to_set.get(k, {"ei_deontti"})
+    prop_set = pyk_props.get(k, set())
+    rx_signal = rx_set - {"ei_deontti"}
+
+    ml_n += 1
+    # Pykälä-tason mittarit
+    if rx_signal == prop_set or (not rx_signal and not prop_set):
+        ml_exact += 1
+    if (rx_signal & prop_set) or (not prop_set and "ei_deontti" in rx_set):
+        ml_overlap += 1
+
+    # Per-luokka TP / FP / FN
+    for c in ML_CLASSES:
+        in_rx = c in rx_signal
+        in_pr = c in prop_set
+        if in_rx and in_pr:
+            ml_stats[c]["tp"] += 1
+        elif in_rx and not in_pr:
+            ml_stats[c]["fp"] += 1
+        elif not in_rx and in_pr:
+            ml_stats[c]["fn"] += 1
+
+# Lasketaan yhteenveto-mittarit
+ml_summary = {}
+for c in ML_CLASSES:
+    tp, fp, fn = ml_stats[c]["tp"], ml_stats[c]["fp"], ml_stats[c]["fn"]
+    p = tp / (tp + fp) if (tp + fp) else 0
+    r = tp / (tp + fn) if (tp + fn) else 0
+    f1 = 2*p*r / (p + r) if (p + r) else 0
+    ml_summary[c] = {"tp": tp, "fp": fp, "fn": fn, "prec": p, "rec": r, "f1": f1}
+total_tp = sum(s["tp"] for s in ml_summary.values())
+total_fp = sum(s["fp"] for s in ml_summary.values())
+total_fn = sum(s["fn"] for s in ml_summary.values())
+ml_micro_p = total_tp / (total_tp + total_fp) if (total_tp + total_fp) else 0
+ml_micro_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) else 0
+ml_micro_f1 = 2*ml_micro_p*ml_micro_r / (ml_micro_p + ml_micro_r) if (ml_micro_p + ml_micro_r) else 0
+
+print(f"  Multi-label exact match: {ml_exact:,} / {ml_n:,} = {ml_exact/ml_n*100:.1f}%")
+print(f"  Multi-label overlap:     {ml_overlap:,} / {ml_n:,} = {ml_overlap/ml_n*100:.1f}%")
+print(f"  Per-class F1: " + ", ".join(f"{c}={ml_summary[c]['f1']*100:.1f}%" for c in ML_CLASSES))
 
 # ── Toimija-aggregaatti ──────────────────────────────────────────────────────
 # LLM kirjasi kullekin pykälälle oikeussubjektin (toimijan). Aggregoidaan se
@@ -198,7 +307,44 @@ def stats_table_html(s, label):
       </table>
     </div>"""
 
+def multilabel_card_html():
+    """Erillinen kortti multi-label-vertailusta propositio-aineistoon."""
+    overlap_pct = ml_overlap / ml_n if ml_n else 0
+    overlap_color = "#1e8449" if overlap_pct >= 0.75 else "#d68910" if overlap_pct >= 0.60 else "#c0392b"
+    rows_html = ""
+    for cat in ML_CLASSES:
+        s = ml_summary[cat]
+        f1c = "#1e8449" if s["f1"] >= 0.70 else "#d68910" if s["f1"] >= 0.50 else "#c0392b"
+        rows_html += f"""<tr>
+          <td><span class="badge" style="background:{CAT_COLOR[cat]}">{cat}</span></td>
+          <td class="num">{pct(s['prec'])}</td>
+          <td class="num">{pct(s['rec'])}</td>
+          <td class="num" style="color:{f1c};font-weight:600">{pct(s['f1'])}</td>
+          <td class="num light">{s['tp']}/{s['fn']}/{s['fp']}</td>
+        </tr>"""
+    micro_color = "#1e8449" if ml_micro_f1 >= 0.70 else "#d68910" if ml_micro_f1 >= 0.50 else "#c0392b"
+    return f"""
+    <div class="stat-card" style="border-left:3px solid #74b9ff;padding-left:8px">
+      <div class="stat-header">
+        Multi-label vs. propositiot
+        <span class="acc-badge" style="background:{overlap_color}">{pct(overlap_pct)} overlap</span>
+        <span class="light">n={ml_n:,}</span>
+      </div>
+      <table class="stat-tbl">
+        <tr><th>Luokka</th><th>Prec</th><th>Rec</th><th>F1</th><th>TP/FN/FP</th></tr>
+        {rows_html}
+        <tr style="border-top:1px solid #dfe6e9">
+          <td style="font-weight:600;font-size:11px;color:#636e72">micro-AVG</td>
+          <td class="num">{pct(ml_micro_p)}</td>
+          <td class="num">{pct(ml_micro_r)}</td>
+          <td class="num" style="color:{micro_color};font-weight:700">{pct(ml_micro_f1)}</td>
+          <td class="num light">—</td>
+        </tr>
+      </table>
+    </div>"""
+
 stats_html = stats_table_html(all_stats, "Kaikki")
+stats_html += multilabel_card_html()
 for org in ORGS:
     stats_html += stats_table_html(org_stats[org], org.capitalize())
 
@@ -720,7 +866,70 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   kyseinen luokka on hyvin tunnistettavissa molemmilla tavoilla.</p>
 
   <hr class="divider">
-  <h3>4. Menetelmän rajat</h3>
+  <h3>4. Mitä propositiolla tarkoitetaan</h3>
+
+  <p style="background:#e8f4f8;padding:14px 18px;border-left:3px solid #2980b9;border-radius:4px">
+    <strong>Propositio</strong> tässä työssä tarkoittaa <em>yhtä itsenäistä
+    deonttista väittämää muodossa <strong>(toimija, modaliteetti, kohde)</strong></em>
+    — esimerkiksi (<em>kunta</em>, <em>velvoite</em>, <em>järjestää sosiaali­palvelut</em>)
+    tai (<em>tekijä</em>, <em>kielto</em>, <em>luovuttaa oikeutta kolmannelle</em>).
+    Yksi pykälä voi sisältää useita propositioita kohdistuen eri toimijoihin.
+  </p>
+
+  <p><strong>Mistä termi tulee:</strong> aiemmin pykälä luokiteltiin yhteen luokkaan
+  (velvoite, lupa, kielto, suositus tai ei-deontti). Aineiston laadunarvioinnissa
+  havaittiin, että monissa pykälissä on <em>useita rinnakkaisia</em> deonttisia
+  väittämiä kohdistuen eri toimijoihin. Esimerkiksi tekijän­oikeuslain
+  jälleenmyyntipykälä (26 i §) sisältää saman tekstin sisällä:</p>
+
+  <ul style="line-height:1.6">
+    <li><strong>tekijällä on oikeus saada korvaus</strong> jälleenmyynnistä → <em>lupa</em></li>
+    <li><strong>tekijä ei voi luovuttaa oikeutta kolmannelle</strong> → <em>kielto</em></li>
+    <li><strong>korvaukset käytetään tekijöiden yhteisiin tarkoituksiin</strong>
+        (jos oikeudenomistajia ei ole) → <em>velvoite</em></li>
+  </ul>
+
+  <p>Yksiluokkainen luokitus tiivistää nämä yhteen leimaan ja hukkaa rinnakkaiset
+  väittämät. Propositio-taso säilyttää ne erillisinä, jolloin samasta pykälästä
+  tulee 0–N riviä taulukkoon — yksi rivi per propositio.</p>
+
+  <p><strong>Miten aineisto syntyi:</strong> sama 22 927 pykälän otos annotoitiin
+  uudelleen kielimallilla, jolle annettiin tehtäväksi listata <em>kaikki</em>
+  pykälän itsenäiset deonttiset väittämät yhden pääluokan sijaan. Tulokseksi
+  saatiin <strong>{n_props:,} propositiota {len(pyk_props):,} pykälässä</strong>
+  — keskimäärin {n_props/max(len(pyk_props),1):.2f} propositiota per pykälä.
+  Tarjouspyyntö viittaa tähän rakenteeseen "(toimija, tehtävä, toiminnan kohde)
+  -triplana", ja propositio on tämän tekninen toteutus.</p>
+
+  <hr class="divider">
+  <h3>5. Multi-label-vertailu propositio-aineistoon</h3>
+
+  <p>Sääntöpohjaista luokitinta on laajennettu palauttamaan yhden luokan
+  sijaan <strong>joukon</strong> kaikista modaliteeteista jotka tekstistä
+  löytyvät. Esimerkiksi pykälä jossa on sekä "ei saa" että "on tehtävä"
+  saa luokkajoukon {{kielto, velvoite}} aiemman yhden luokan sijaan.
+  Tämä mahdollistaa suoran vertailun propositio-aineistoa vasten:</p>
+
+  <ul>
+    <li><strong>Overlap</strong> — kuinka monessa pykälässä regex tunnistaa
+        ainakin yhden saman modaliteetin kuin propositio-aineisto.
+        Tällä hetkellä <strong>{pct(ml_overlap/ml_n if ml_n else 0)}</strong>
+        ({ml_overlap:,} / {ml_n:,} pykälää).</li>
+    <li><strong>Per-luokka P/R/F1</strong> — kerrotaan kuinka tarkasti regex
+        tunnistaa kunkin modaliteetin kun se on tosiasiallisesti läsnä
+        pykälässä. Velvoite ja lupa tunnistetaan parhaiten
+        (F1 ~{pct(ml_summary['velvoite']['f1'])} ja
+        {pct(ml_summary['lupa']['f1'])}), kielto keskitasoa
+        ({pct(ml_summary['kielto']['f1'])}), ja suositus on heikoin luokka
+        ({pct(ml_summary['suositus']['f1'])}) myös pienen otoksen takia.</li>
+  </ul>
+
+  <p>Multi-label-mittari antaa <em>rehellisemmän</em> kuvan menetelmien
+  vahvuuksista ja heikkouksista kuin yksi kokonaislukuluku, koska se
+  paljastaa kunkin luokan tunnistuksen erikseen.</p>
+
+  <hr class="divider">
+  <h3>6. Menetelmän rajat</h3>
 
   <p>Sääntöpohjaisen regex-luokittimen tarkkuus jää lakitekstillä noin
   70 % tasolle. Pääsyy on lakikielen rakenteellinen monitulkintaisuus:
