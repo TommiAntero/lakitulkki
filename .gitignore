@@ -50,6 +50,7 @@ data/sections/
 !data/toimija_velvoitteet.csv
 !data/deontic_propositions.csv
 !data/consolidated_sections_lite.csv
+!data/regex_propositions.csv
 
 # Resume-tilatiedostot: ei pitkäaikaista arvoa, generoidaan ajojen aikana
 data/deontic_propositions_done.txt
