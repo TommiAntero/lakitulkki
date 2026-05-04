@@ -898,8 +898,9 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   pykälän itsenäiset deonttiset väittämät yhden pääluokan sijaan. Tulokseksi
   saatiin <strong>{n_props:,} propositiota {len(pyk_props):,} pykälässä</strong>
   — keskimäärin {n_props/max(len(pyk_props),1):.2f} propositiota per pykälä.
-  Tarjouspyyntö viittaa tähän rakenteeseen "(toimija, tehtävä, toiminnan kohde)
-  -triplana", ja propositio on tämän tekninen toteutus.</p>
+  Rakennetta voidaan hyödyntää esimerkiksi organisaatio- ja tehtäväanalyysissä,
+  jossa keskeinen kysymys on usein "mihin toimijaan kohdistuu mitäkin
+  velvoitteita, oikeuksia ja kieltoja".</p>
 
   <hr class="divider">
   <h3>5. Multi-label-vertailu propositio-aineistoon</h3>
