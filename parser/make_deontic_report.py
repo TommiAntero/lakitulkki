@@ -1212,7 +1212,38 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   paljastaa kunkin luokan tunnistuksen erikseen.</p>
 
   <hr class="divider">
-  <h3>6. Menetelmän rajat</h3>
+  <h3>6. Säännöstön pohja</h3>
+
+  <p>Sääntöpohjaisen luokittimen patternit pohjautuvat kahteen lähteeseen:</p>
+
+  <ul>
+    <li><strong>Empiirinen pattern-louhinta</strong> — n-grammeja ja
+        sanatason rakenteita, joiden esiintyminen korreloi vahvasti tietyn
+        modaliteetin kanssa kielimalliannotaatioissa. Tällä tavalla on
+        louhittu mm. velvoitteen passiivisten nesessitiivirakenteiden
+        vakiotaivutusmuodot ja kielto­jen toistuvat ilmaisukaavat.</li>
+    <li><strong>Lainkirjoittajan opas</strong>
+        (<a href="https://lainkirjoittaja.finlex.fi/">lainkirjoittaja.finlex.fi</a>),
+        oikeusministeriön virallinen ohje lakien laadinnasta. Erityisesti
+        oppaan luku 12.9 (Kriminalisointi ja rangaistussäännökset)
+        vahvistaa rikoslakikielto-patternin: rangaistussäännös tulee
+        kirjoittaa muotoon <em>"Joka [teko], on tuomittava [rikosnimike]
+        [rangaistus]"</em> — tämä on tunnistettu omaksi prioriteettitasokseen
+        regexissä. Oppaan luku 23 (Määritelmistä) on käytetty referenssinä
+        ei-deonttisten määritelmälauseiden tunnistuksessa.</li>
+  </ul>
+
+  <p>On syytä todeta, että opas <em>ei tarjoa kattavaa luetteloa</em>
+  velvoite-, lupa-, kielto- ja suositusilmaisujen vakiomuodoista —
+  ohjeistus on hajallaan eri luvuissa ja pääosin diskursiivista. Tästä
+  syystä regex-säännöstö perustuu osittain dataan ja kokemukselliseen
+  havaintoon eikä yksin auktoritatiiviseen lähteeseen. Tämä on yksi
+  perustelu sille, miksi paikallisesta sääntöpohjaisesta menetelmästä
+  on järkevää siirtyä rakenteeseen, jossa kielimalli osallistuu
+  monitulkintaisuuden ratkaisuun.</p>
+
+  <hr class="divider">
+  <h3>7. Menetelmän rajat</h3>
 
   <p>Sääntöpohjaisen regex-luokittimen tarkkuus jää lakitekstillä noin
   70 % tasolle. Pääsyy on lakikielen rakenteellinen monitulkintaisuus:
