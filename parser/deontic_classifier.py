@@ -55,6 +55,13 @@ RULES: list[tuple[str, list[str]]] = [
     ]),
 
     # TIER 2 — EI_DEONTTI: voimaantulo, määritelmät ja soveltamisalarajaukset
+    # Määritelmälauseiden ja soveltamisalalauseiden vakiomuodot perustuvat
+    # Lainkirjoittajan oppaan luvun 23 (Määritelmistä) listaamiin kaavoihin:
+    # "Tässä laissa tarkoitetaan", "Edellä N momentissa tarkoitetaan",
+    # "Tätä lakia sovelletaan X:iin", "Tämän lain mukaisesti pannaan
+    # täytäntöön". Patternit ovat auktoritatiivisesti perusteltuja vaikka
+    # niiden lisääminen voi pienentää yhtäpitävyyttä LLM-annotaation kanssa
+    # — joka on jo todettu olevan myös itse virheille altis.
     ("ei_deontti", [
         r"tulee?\s+voimaan",
         r"tullessa\s+voimaan",
@@ -65,6 +72,9 @@ RULES: list[tuple[str, list[str]]] = [
         r"\bsovelletaan\s+(?:mitä|vastaavasti|tässä|myös|edelleen|kuitenkin|siten)\b",
         r"tässä\s+laissa\s+tarkoitet",
         r"tässä\s+momentissa\s+tarkoitet",
+        r"\bedellä\s+\d+\s+momentissa\s+tarkoitet",     # opas 23 — määritelmäviittaus
+        r"\btätä\s+lakia\s+sovelletaan\b",              # opas 23 — soveltamisalalause
+        r"\btämän\s+lain\s+mukaisesti\s+pannaan\s+täytäntöön\b",  # opas 23 — täytäntöönpano
         r"kumotaan",
         r"muutetaan\s+seuraavasti",
         r"\bei\s+sovelleta\b",

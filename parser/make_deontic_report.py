@@ -1237,10 +1237,19 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   velvoite-, lupa-, kielto- ja suositusilmaisujen vakiomuodoista —
   ohjeistus on hajallaan eri luvuissa ja pääosin diskursiivista. Tästä
   syystä regex-säännöstö perustuu osittain dataan ja kokemukselliseen
-  havaintoon eikä yksin auktoritatiiviseen lähteeseen. Tämä on yksi
-  perustelu sille, miksi paikallisesta sääntöpohjaisesta menetelmästä
-  on järkevää siirtyä rakenteeseen, jossa kielimalli osallistuu
-  monitulkintaisuuden ratkaisuun.</p>
+  havaintoon eikä yksin auktoritatiiviseen lähteeseen.</p>
+
+  <p style="background:#fff3cd;padding:10px 14px;border-left:3px solid #d68910;border-radius:4px">
+    <strong>Huomio yhtäpitävyysmittareiden tulkinnasta:</strong>
+    Kun regex-säännöstöön lisätään oppaaseen perustuva pattern, se voi
+    johtaa siihen että F1-mittari LLM:n annotaatiota vasten <em>laskee</em>
+    — koska kielimalli on luokitellut joitakin pykäliä eri tavalla.
+    Tällöin tulee muistaa, että kielimallikin tekee virheitä (esim.
+    rikoslain rangaistussäännöksiä on havaittu luokitelluksi velvoitteiksi
+    vaikka ne ovat funktionaalisesti kieltoja). Pieni regressio
+    LLM-yhtäpitävyydessä ei välttämättä tarkoita pattern-virhettä — se
+    voi heijastaa sitä, että regex-sääntö on auktoriteetti­lähteen
+    mukainen ja kielimalli on epäjohdonmukainen.</p>
 
   <hr class="divider">
   <h3>7. Menetelmän rajat</h3>
