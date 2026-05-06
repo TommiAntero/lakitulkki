@@ -261,6 +261,8 @@ if PROPS_CSV.exists():
                 "k": (r["kohde"] or "")[:160],
                 "t": r["type"][:1],     # 'e' / 'i' kompaktia varten
                 "p": (r["perustelu"] or "")[:200],
+                "te": (r.get("tehtava") or "")[:60],          # uusi: tehtava
+                "ko": (r.get("toiminnan_kohde") or "")[:160], # uusi: toiminnan kohde
             })
 
 # Lista JS-näkymälle: pykälä-objektit, propositiot ovat alla
@@ -1179,10 +1181,16 @@ td {{ padding: 7px 12px; vertical-align: top; }}
   uudelleen kielimallilla, jolle annettiin tehtäväksi listata <em>kaikki</em>
   pykälän itsenäiset deonttiset väittämät yhden pääluokan sijaan. Tulokseksi
   saatiin <strong>{n_props:,} propositiota {len(pyk_props):,} pykälässä</strong>
-  — keskimäärin {n_props/max(len(pyk_props),1):.2f} propositiota per pykälä.
-  Rakennetta voidaan hyödyntää esimerkiksi organisaatio- ja tehtäväanalyysissä,
-  jossa keskeinen kysymys on usein "mihin toimijaan kohdistuu mitäkin
-  velvoitteita, oikeuksia ja kieltoja".</p>
+  — keskimäärin {n_props/max(len(pyk_props),1):.2f} propositiota per pykälä.</p>
+
+  <p><strong>Tehtävän ja toiminnan kohteen erottelu:</strong> Toisessa
+  vaiheessa kunkin proposition kuvauskenttä jaettiin kahdeksi: <em>tehtava</em>
+  (verbi/predikaatti — mitä toimitaan) ja <em>toiminnan_kohde</em>
+  (substantiivilauseke — mihin toiminta kohdistuu). Esimerkiksi rivi
+  <em>"saada korvaus jälleenmyynnistä"</em> jakautuu osiin
+  <em>tehtava: saada</em> ja <em>toiminnan_kohde: korvaus jälleenmyynnistä</em>.
+  Eroteltu rakenne tukee suoraan organisaatio- ja tehtäväanalyysiä, jossa
+  keskeinen kysymys on usein <em>"kuka tekee mitä millekin"</em>.</p>
 
   <hr class="divider">
   <h3>5. Multi-label-vertailu propositio-aineistoon</h3>
@@ -1519,11 +1527,19 @@ function renderProps() {{
       const typeBadge = q.t === 'i'
         ? '<span class="type-impl">implisiittinen</span>'
         : '<span class="type-expl">eksplisiittinen</span>';
+      // Näytä erotellut tehtava + toiminnan_kohde jos saatavilla, muutoin vanha kohde
+      const detailLine = (q.te || q.ko)
+        ? `<div class="kohde">
+             <span style="color:#1e8449;font-weight:600">${{q.te || ''}}</span>
+             ${{q.ko ? `<span style="color:#2d3436"> → ${{q.ko}}</span>` : ''}}
+           </div>
+           <div class="light" style="font-size:11px;font-style:italic">alkuperäinen: ${{q.k}}</div>`
+        : `<div class="kohde">${{q.k}}</div>`;
       propsHtml += `<div class="prop-row">
         <div><span class="badge" style="background:${{COLORS[q.m]}}">${{q.m}}</span></div>
         <div class="toimija">${{q.s || '<span class="light">—</span>'}}</div>
         <div>
-          <div class="kohde">${{q.k}}</div>
+          ${{detailLine}}
           ${{q.p ? `<div class="perust">"${{q.p}}"</div>` : ''}}
         </div>
         <div>${{typeBadge}}</div>

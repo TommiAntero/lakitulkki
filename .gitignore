@@ -55,6 +55,11 @@ data/sections/
 # Resume-tilatiedostot: ei pitkäaikaista arvoa, generoidaan ajojen aikana
 data/deontic_propositions_done.txt
 data/deontic_propositions_done.txt.bak
+data/split_kohde_done.txt
+data/*.csv.bak
+
+# Sisäiset palaverimuistiot ja vastaava ei-jaeltava materiaali
+internal/
 
 # Parserin syötteet (ZIP-arkistot, XML-tiedostot)
 parser/input/
