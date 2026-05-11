@@ -45,6 +45,9 @@ data/*.csv
 data/*.parquet
 data/sections/
 
+# Streaming-parsijan tuotos liian iso versionhallintaan (~200 MB)
+data/asiakas_jakelu/momentit.csv
+
 # Poikkeus: jaetut HTML-raportit ja asiakkaan tarvitsemat CSV:t versiohallinnassa
 !data/*.html
 !data/toimija_velvoitteet.csv

@@ -5,13 +5,14 @@ demonstroimaan deonttista luokittelua ja propositio-tason ekstraktointia.
 
 ## Tiedostot
 
-### `regex_propositions.csv` (15 MB)
+### `regex_propositions.csv`
 
-77 288 deonttista propositiota muodossa `(toimija, modaliteetti, kohde)`,
-ekstraktoituna paikallisesti regex-pohjaisesti **kaikkien 124 414 voimassa
-olevan pykälän** aineistosta.
+Deonttisia propositioita muodossa `(toimija, modaliteetti, kohde)`,
+ekstraktoituna regex-pohjaisesti **kaikkien 153 052 pykälän** aineistosta.
 
-**Tuottanut:** `parser/proposition_extractor.py` (`--run-all`-tilassa)
+**Tuottanut:** `parser/build_jakelu_from_momentit.py` (lukee
+`momentit.csv` ja ajaa `proposition_extractor.extract_propositions`
+jokaiselle pykälälle)
 **Sarakkeet:** law_id, law_title, eId, num, toimija, modaliteetti, kohde, distance
 
 Tämä on se tulos jonka asiakkaan pitäisi saada kun he ajavat oman
@@ -50,13 +51,13 @@ hyvinvointialueisiin" tai "mitä kieltoja tekijään kohdistuu".
 **Sarakkeet:** organisaatio, modaliteetti, org_tyyppi, law_title,
 pykala, perustelu, teksti
 
-### `consolidated_sections_lite.csv` (15 MB)
+### `consolidated_sections_lite.csv`
 
 Yksi rivi per pykälä. Sisältää **regex-luokittimen pykälätason
-modaliteetin** (yksi luokka per pykälä) kaikille 124 414 voimassa olevalle
-pykälälle.
+modaliteetin** (yksi luokka per pykälä) kaikille 153 052 pykälälle.
 
-**Tuottanut:** `parser/deontic_classifier.py` -> `classify(text)`
+**Tuottanut:** `parser/build_jakelu_from_momentit.py`
+(`deontic_classifier.classify(text)` per pykälä)
 **Sarakkeet:** law_id, law_title, eId, num, heading, modaliteetti_v4
 
 Käytännöllinen pikaviite koko aineiston jakaumiin ja yhteenvetoihin.
@@ -74,8 +75,8 @@ Käytännöllinen pikaviite koko aineiston jakaumiin ja yhteenvetoihin.
 ## Aineiston tausta
 
 - Lähde: Finlexin avoin data, ajantasainen lainsäädäntö
-- Parsittu: 124 414 pykälää 38 965 säädöstunnuksesta
-- Aineiston päivitysajankohta: 2026-01-30 (Finlex-poiminta)
+- Parsittu: 153 052 pykälää, 328 410 momenttia, 56 360 säädöstunnuksesta
+- Aineiston päivitysajankohta: 2026-05-11 (Finlex-poiminta)
 - Luokittelusääntöjen pohja: empiirinen pattern-louhinta + Lainkirjoittajan
   oppaan luvut 12.9 (rangaistussäännökset) ja 23 (määritelmät)
 

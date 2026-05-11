@@ -289,7 +289,7 @@ print(f"  Propositio-näkymä: {len(prop_pages_list):,} pykälää")
 # ekstraktorin tulokset rinnalle kun ne ovat saman pykälän osumat. Pidämme
 # JSON-koon hallinnassa rajaamalla otoksen LLM-pykäliin.
 
-REGEX_PROPS_CSV = ROOT / "data" / "regex_propositions.csv"
+REGEX_PROPS_CSV = ROOT / "data" / "asiakas_jakelu" / "regex_propositions.csv"
 print("Rakennetaan LLM-vs-regex -vertailunäkymää...")
 
 # law_id+eId+num -> {llm_props, regex_props, law, num, text, org}
@@ -962,9 +962,11 @@ td {{ padding: 7px 12px; vertical-align: top; }}
       <h4>Lainsäädännön lataus ja parsinta</h4>
       <p>Lähdeaineistona on Finlexin avoin data: kaikki voimassa olevat
       suomenkieliset säädökset koneluettavassa AKN-muotoisessa XML-rakenteessa.
-      Jokaisesta laista poimittiin rakenteiset elementit: luvut, pykälät,
-      momentit ja alakohdat. Aineiston laajuus on noin 4 GB pakattuna ja
-      <strong>124 414 pykälää</strong>.</p>
+      Jokaisesta säädöksestä poimittiin rakenteiset elementit: luvut, pykälät,
+      momentit ja alakohdat. Aineiston laajuus on noin 4 GB pakattuna:
+      <strong>56 360 säädöstä</strong> (joista 9 060 lakia, 24 567 asetusta,
+      19 758 päätöstä, 2 975 muuta), <strong>153 052 pykälää</strong> ja
+      <strong>328 410 momenttia</strong>.</p>
     </div>
   </div>
 
